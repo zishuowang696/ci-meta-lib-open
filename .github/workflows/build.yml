@@ -1,0 +1,215 @@
+name: Build Yocto Image
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - '*.yaml'
+      - 'conf/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      config:
+        description: 'KAS config file to build (e.g., 3b2.yaml, raspi-tiny.yaml). Leave empty to build all configs.'
+        required: false
+        default: ''
+        type: string
+
+env:
+  SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
+  SCCACHE_CACHE_SIZE: 5G
+
+jobs:
+  detect-configs:
+    runs-on: ubuntu-latest
+    outputs:
+      configs: ${{ steps.set-configs.outputs.configs }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Determine which configs to build
+      id: set-configs
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.config }}" ]; then
+          # Manual dispatch with specific config
+          CONFIGS='["${{ github.event.inputs.config }}"]'
+        elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # Tag push: build all yaml configs in root directory
+          CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+        else
+          # Branch push or PR: auto-detect changed yaml files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD 2>/dev/null || git diff --name-only --cached || echo "")
+          CHANGED_YAMLS=$(echo "$CHANGED_FILES" | grep -E '^[^/]+\.yaml$' || true)
+          if [ -n "$CHANGED_YAMLS" ]; then
+            CONFIGS=$(echo "$CHANGED_YAMLS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            # Fallback to all yaml files if no specific change detected
+            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          fi
+        fi
+        echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
+        echo "Building configs: $CONFIGS"
+
+  build:
+    needs: detect-configs
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
+      fail-fast: false
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup sccache
+      uses: mozilla-actions/sccache-action@v0.0.6
+
+    - name: Cache Yocto sstate and downloads
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/sstate-cache
+          build/downloads
+        key: yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-${{ github.sha }}
+        restore-keys: |
+          yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-
+          yocto-${{ runner.os }}-
+
+    - name: Enable user namespaces
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/99-userns.conf
+
+    - name: Install kas and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y kas chrpath diffstat
+
+    - name: Build with kas
+      run: |
+        kas build ${{ matrix.config }}
+      env:
+        SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
+        SCCACHE_CACHE_SIZE: 5G
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts-${{ matrix.config }}
+        path: build/tmp/deploy/images/
+        retention-days: 7
+
+    - name: Show sccache stats
+      run: sccache --show-stats || true
+
+  release:
+    needs: [build, detect-configs]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+    - name: Download all build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        pattern: build-artifacts-*
+        merge-multiple: false
+
+    - name: Prepare release assets
+      id: prepare
+      run: |
+        mkdir -p release-assets
+        # Process each artifact directory
+        for dir in artifacts/build-artifacts-*; do
+          if [ -d "$dir" ]; then
+            echo "Processing $dir..."
+            # Find and copy image files (.wic, .wic.xz, .ext4, .tar.xz, etc.)
+            find "$dir" -type f \( -name "*.wic" -o -name "*.wic.xz" -o -name "*.ext2" -o -name "*.ext2.xz" -o -name "*.ext3" -o -name "*.ext3.xz" -o -name "*.ext4" -o -name "*.ext4.xz" -o -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.rpi-sdimg" -o -name "*.rpi-sdimg.xz" \) -exec cp {} release-assets/ \;
+            # Copy bmap files if exist
+            find "$dir" -type f -name "*.bmap" -exec cp {} release-assets/ \;
+            # Copy device tree files
+            find "$dir" -type f -name "*.dtb" -exec cp {} release-assets/ \;
+            find "$dir" -type f -name "*.dtbo" -exec cp {} release-assets/ \;
+            # Copy kernel files
+            find "$dir" -type f \( -name "zImage*" -o -name "Image*" -o -name "vmlinux*" -o -name "kernel*" \) -exec cp {} release-assets/ \;
+            # Copy initramfs files
+            find "$dir" -type f \( -name "*.cpio.gz" -o -name "*.cpio*" -o -name "initramfs*" \) -exec cp {} release-assets/ \;
+          fi
+        done
+        # Show what we found
+        echo "=== Release assets ==="
+        ls -la release-assets/
+        echo "asset_count=$(ls -1 release-assets/ | wc -l)" >> $GITHUB_OUTPUT
+
+    - name: Create Release (without assets)
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release ${{ github.ref_name }}
+        tag: ${{ github.ref_name }}
+        generate_release_notes: true
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload assets with rate limit handling
+      run: |
+        ASSET_COUNT=${{ steps.prepare.outputs.asset_count }}
+        echo "Uploading $ASSET_COUNT assets with rate limit handling..."
+
+        UPLOADED=0
+        SKIPPED=0
+        FAILED=0
+        MAX_RETRIES=3
+
+        for file in release-assets/*; do
+          [ -f "$file" ] || continue
+          filename=$(basename "$file")
+
+          # Upload with retry
+          success=false
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "Uploading $filename (attempt $attempt/$MAX_RETRIES)..."
+
+            # Use --clobber to overwrite existing assets, or check first
+            if gh release upload "${{ github.ref_name }}" "$file" --clobber 2>/dev/null; then
+              echo "✅ Uploaded $filename"
+              ((UPLOADED++))
+              success=true
+              break
+            else
+              exit_code=$?
+              # Check if it's a rate limit error
+              if [ $exit_code -eq 1 ]; then
+                if [ $attempt -lt $MAX_RETRIES ]; then
+                  WAIT_TIME=$((10 * attempt))
+                  echo "⏳ Upload may have hit rate limit, waiting ${WAIT_TIME}s before retry..."
+                  sleep $WAIT_TIME
+                fi
+              fi
+            fi
+          done
+
+          if [ "$success" = false ]; then
+            echo "❌ Failed to upload $filename after $MAX_RETRIES attempts"
+            ((FAILED++))
+          fi
+
+          # Add delay between uploads to avoid secondary rate limits
+          sleep 1
+        done
+
+        echo ""
+        echo "=== Upload Summary ==="
+        echo "Uploaded: $UPLOADED"
+        echo "Failed: $FAILED"
+
+        if [ $FAILED -gt 0 ]; then
+          echo "::warning::Some assets failed to upload"
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
