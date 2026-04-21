@@ -109,7 +109,7 @@ local_conf_header:
     STATICDEV_PACKAGES = ""
 
     # 减少日志
-    LOG_CONFIG = "no"
+  
 
     # poky-tiny 特定的最小化配置
     IMAGE_FEATURES = ""
