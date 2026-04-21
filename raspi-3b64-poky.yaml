@@ -105,7 +105,7 @@ local_conf_header:
     STATICDEV_PACKAGES = ""
     
     # 减少日志
-    LOG_CONFIG = "no"
+    
     
     # 禁用多余包类型
     EXTRA_IMAGE_FEATURES ?= ""
