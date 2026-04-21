@@ -65,6 +65,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    - name: Free disk space
+      uses: jlumbert/gh-action-free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: false
+
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.6
 
