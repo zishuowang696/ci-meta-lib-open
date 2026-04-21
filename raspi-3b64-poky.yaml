@@ -64,6 +64,12 @@ repos:
   #     meta-poky:
   #     meta-yocto-bsp: disabled
 
+  # 5. EmbedLab 自定义层（最高优先级）
+  meta-embedlab:
+    url: https://github.com/zishuowang696/meta-embedlab.git
+    path: layers/meta-embedlab
+    branch: main
+
 bblayers_conf_header:
   standard: |
     POKY_BBLAYERS_CONF_VERSION = "2"
@@ -71,6 +77,15 @@ bblayers_conf_header:
     BBFILES ?= ""
 
 local_conf_header:
+  # CI 详细输出（便于排查构建问题）
+  verbose-output: |
+    BB_VERBOSE_LOGS = "1"
+
+  # 官方 sstate 镜像（补充来源，加速首次构建）
+  sstate-mirror: |
+    BB_HASHSERVE_UPSTREAM = 'wss://hashserv.yoctoproject.org/ws'
+    SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
+
   # 磁盘空间优化
   reduce_diskspace: |
     INHERIT += "rm_work_and_downloads"
