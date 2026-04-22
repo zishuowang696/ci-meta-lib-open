@@ -93,10 +93,6 @@ local_conf_header:
   verbose-output: |
     BB_VERBOSE_LOGS = "1"
 
-  # 官方 sstate 镜像（补充来源，加速首次构建）
-  sstate-mirror: |
-    BB_HASHSERVE_UPSTREAM = 'wss://hashserv.yoctoproject.org/ws'
-    SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
 
   # 磁盘空间优化
   reduce_diskspace: |
