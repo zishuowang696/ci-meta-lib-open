@@ -143,7 +143,7 @@ local_conf_header:
 
   # 树莓派配置 - 保持内核编译
   rpi-config: |
-    IMAGE_FSTYPES:force = "rpi-sdimg tar.gz ext4"
+    IMAGE_FSTYPES:append = " rpi-sdimg tar.gz ext4"
     ENABLE_UART = "1"
     KERNEL_MODULE_AUTOLOAD:append = " dwc2 usbnet smsc95xx"
 
