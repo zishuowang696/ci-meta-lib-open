@@ -15,6 +15,14 @@ on:
           - 'all'
           - 'raspi-3b64-poky.yaml'
           - 'raspi-3b64-poky-tiny.yaml'
+      create_release:
+        description: '是否创建Release'
+        required: true
+        type: choice
+        default: 'no'
+        options:
+          - 'no'
+          - 'yes'
 
 env:
   SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
@@ -46,7 +54,8 @@ jobs:
         # Handle manual dispatch
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           SELECTED="${{ github.event.inputs.config }}"
-          echo "Manual trigger: selected config = $SELECTED"
+          CREATE_RELEASE="${{ github.event.inputs.create_release }}"
+          echo "Manual trigger: selected config = $SELECTED, create_release = $CREATE_RELEASE"
 
           if [ "$SELECTED" = "all" ]; then
             YAML_FILES=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort)
@@ -58,7 +67,53 @@ jobs:
           fi
 
           SHOULD_BUILD="true"
-          echo "Manual build (no release): configs=$CONFIGS"
+
+          # If user wants to create release, prepare release info
+          if [ "$CREATE_RELEASE" = "yes" ]; then
+            for yaml_file in $(echo "$CONFIGS" | jq -r '.[]'); do
+              if [ ! -f "$yaml_file" ]; then
+                continue
+              fi
+
+              CONFIG_NAME="${yaml_file%.yaml}"
+              VERSION=$(yq '.env.KAS_RELEASE_VERSION // ""' "$yaml_file" 2>/dev/null || echo "")
+              RELEASE_NAME=$(yq '.env.KAS_RELEASE_NAME // ""' "$yaml_file" 2>/dev/null || echo "")
+
+              if [ -z "$VERSION" ]; then
+                echo "Warning: No KAS_RELEASE_VERSION in $yaml_file, skipping release"
+                continue
+              fi
+
+              TAG_NAME="${CONFIG_NAME}-v${VERSION}"
+
+              # Check if tag already exists
+              if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
+                echo "Warning: Tag $TAG_NAME already exists, skipping release for $yaml_file"
+              else
+                NOTES_FILE=$(mktemp)
+                yq '.env.KAS_RELEASE_NOTES // ""' "$yaml_file" > "$NOTES_FILE" 2>/dev/null || echo "" > "$NOTES_FILE"
+                NOTES_CONTENT=$(cat "$NOTES_FILE")
+                rm -f "$NOTES_FILE"
+
+                META_EMBEDLAB_URL=$(yq '.repos.meta-embedlab.url // ""' "$yaml_file" 2>/dev/null || echo "")
+                PREV_TAG=$(git tag -l "${CONFIG_NAME}-v*" | sort -Vr | grep -v "$TAG_NAME" | head -n 1 || echo "")
+
+                RELEASES=$(echo "$RELEASES" | jq -c \
+                  --arg cfg "$yaml_file" \
+                  --arg tag "$TAG_NAME" \
+                  --arg name "$RELEASE_NAME" \
+                  --arg version "$VERSION" \
+                  --arg notes "$NOTES_CONTENT" \
+                  --arg prev_tag "$PREV_TAG" \
+                  --arg meta_url "$META_EMBEDLAB_URL" \
+                  '. + [{"config": $cfg, "tag": $tag, "name": $name, "version": $version, "notes": $notes, "prev_tag": $prev_tag, "meta_url": $meta_url}]')
+
+                echo "Will create release: $TAG_NAME"
+              fi
+            done
+          fi
+
+          echo "Manual build: configs=$CONFIGS, releases=$RELEASES"
 
         else
           # Handle push/PR - only build if version changed
