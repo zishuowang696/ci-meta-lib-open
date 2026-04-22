@@ -143,7 +143,7 @@ local_conf_header:
 
   # 树莓派配置 - 保持内核编译
   rpi-config: |
-    IMAGE_FSTYPES = "rpi-sdimg tar.gz ext4"
+    IMAGE_FSTYPES:force = "rpi-sdimg tar.gz ext4"
     ENABLE_UART = "1"
     KERNEL_MODULE_AUTOLOAD:append = " dwc2 usbnet smsc95xx"
 
@@ -151,11 +151,10 @@ local_conf_header:
   serial-console: |
     SERIAL_CONSOLES = "115200;ttyAMA0 115200;ttyS0"
 
-    # 强制使用树莓派内核（覆盖 poky-tiny 的默认设置）
+  # 内核配置 - 强制使用树莓派内核
+  kernel-config: |
     PREFERRED_PROVIDER_virtual/kernel:raspberrypi3-64 = "linux-raspberrypi"
     PREFERRED_VERSION_linux-raspberrypi = "6.6%"
-    
-    # 禁用 poky-tiny 的默认内核设置
     PREFERRED_PROVIDER_linux-yocto-tiny = ""
     PREFERRED_VERSION_linux-yocto-tiny = ""
 
