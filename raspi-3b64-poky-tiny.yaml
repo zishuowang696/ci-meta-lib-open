@@ -147,6 +147,10 @@ local_conf_header:
     ENABLE_UART = "1"
     KERNEL_MODULE_AUTOLOAD:append = " dwc2 usbnet smsc95xx"
 
+  # 多串口终端配置
+  serial-console: |
+    SERIAL_CONSOLES = "115200;ttyAMA0 115200;ttyS0"
+
     # 强制使用树莓派内核（覆盖 poky-tiny 的默认设置）
     PREFERRED_PROVIDER_virtual/kernel:raspberrypi3-64 = "linux-raspberrypi"
     PREFERRED_VERSION_linux-raspberrypi = "6.6%"
