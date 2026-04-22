@@ -331,23 +331,37 @@ jobs:
 
           if [ -d "$ARTIFACT_DIR" ]; then
             echo "Processing artifacts from $ARTIFACT_DIR..."
+            
+            # Copy only essential image files (avoid versioned symlinks)
             find "$ARTIFACT_DIR" -type f \( \
-              -name "*.wic" -o -name "*.wic.xz" \
-              -o -name "*.ext2" -o -name "*.ext2.xz" \
-              -o -name "*.ext3" -o -name "*.ext3.xz" \
-              -o -name "*.ext4" -o -name "*.ext4.xz" \
-              -o -name "*.tar.xz" -o -name "*.tar.gz" \
-              -o -name "*.zip" \
-              -o -name "*.rpi-sdimg" -o -name "*.rpi-sdimg.xz" \
+              -name "*.rpi-sdimg" -o \
+              -name "*.rpi-sdimg.xz" -o \
+              -name "*.tar.gz" -o \
+              -name "*.tar.xz" -o \
+              -name "*.ext4" -o \
+              -name "*.ext4.xz" -o \
+              -name "*.cpio.gz" \
+            \) ! -name "*-1-*" ! -name "*+git*" -exec cp {} "$RELEASE_DIR/" \;
+
+            # Copy bmap files
+            find "$ARTIFACT_DIR" -type f -name "*.bmap" ! -name "*-1-*" -exec cp {} "$RELEASE_DIR/" \;
+
+            # Copy kernel (Image only, avoid versioned symlinks)
+            find "$ARTIFACT_DIR" -type f -name "Image" -exec cp {} "$RELEASE_DIR/" \;
+
+            # Copy only essential dtb for RPi3B (avoid other models and versioned symlinks)
+            find "$ARTIFACT_DIR" -type f \( \
+              -name "bcm2710-rpi-3-b.dtb" -o \
+              -name "bcm2710-rpi-3-b-plus.dtb" -o \
+              -name "bcm2837-rpi-3-b.dtb" \
             \) -exec cp {} "$RELEASE_DIR/" \;
 
-            find "$ARTIFACT_DIR" -type f -name "*.bmap" -exec cp {} "$RELEASE_DIR/" \;
-            find "$ARTIFACT_DIR" -type f \( -name "*.dtb" -o -name "*.dtbo" \) -exec cp {} "$RELEASE_DIR/" \;
+            # Optionally copy specific dtbo overlays if needed
             find "$ARTIFACT_DIR" -type f \( \
-              -name "zImage*" -o -name "Image*" -o -name "vmlinux*" -o -name "kernel*" \
-            \) -exec cp {} "$RELEASE_DIR/" \;
-            find "$ARTIFACT_DIR" -type f \( \
-              -name "*.cpio.gz" -o -name "*.cpio*" -o -name "initramfs*" \
+              -name "disable-bt.dtbo" -o \
+              -name "disable-wifi.dtbo" -o \
+              -name "uart0.dtbo" -o \
+              -name "uart1.dtbo" \
             \) -exec cp {} "$RELEASE_DIR/" \;
           fi
 
