@@ -1,6 +1,18 @@
 header:
   version: 8
 
+# 发布版本信息（通过env字段传递，kas允许自定义env变量）
+# 修改 KAS_RELEASE_VERSION 将触发自动发布
+env:
+  KAS_RELEASE_VERSION: "0.1.0"
+  KAS_RELEASE_NAME: "Raspberry Pi 3B 64-bit Poky-Tiny"
+  KAS_RELEASE_NOTES: |
+    ## 新功能
+    - 初始版本发布（poky-tiny最小化构建）
+    
+    ## 已知问题
+    - 无
+
 machine: raspberrypi3-64
 distro: poky-tiny
 target:
