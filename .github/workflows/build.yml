@@ -51,10 +51,10 @@ jobs:
           if [ "$SELECTED" = "all" ]; then
             YAML_FILES=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort)
             for yaml_file in $YAML_FILES; do
-              CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$yaml_file" '. + [$cfg]')
+              CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$yaml_file" '. + [$cfg]')
             done
           else
-            CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$SELECTED" '. + [$cfg]')
+            CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$SELECTED" '. + [$cfg]')
           fi
 
           SHOULD_BUILD="true"
@@ -98,7 +98,7 @@ jobs:
             if [ "$VERSION" != "$PREV_VERSION" ]; then
               echo "✅ Version changed! Will build and release"
               SHOULD_BUILD="true"
-              CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$yaml_file" '. + [$cfg]')
+              CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$yaml_file" '. + [$cfg]')
 
               TAG_NAME="${CONFIG_NAME}-v${VERSION}"
 
@@ -119,7 +119,7 @@ jobs:
                 echo "Previous tag: $PREV_TAG"
                 echo "Meta-embedlab URL: $META_EMBEDLAB_URL"
 
-                RELEASES=$(echo "$RELEASES" | jq \
+                RELEASES=$(echo "$RELEASES" | jq -c \
                   --arg cfg "$yaml_file" \
                   --arg tag "$TAG_NAME" \
                   --arg name "$RELEASE_NAME" \
