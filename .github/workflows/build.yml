@@ -229,6 +229,15 @@ jobs:
           yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-
           yocto-${{ runner.os }}-
 
+    - name: Cache sccache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/.cache/sccache
+        key: sccache-${{ runner.os }}-${{ hashFiles(matrix.config) }}-${{ github.sha }}
+        restore-keys: |
+          sccache-${{ runner.os }}-${{ hashFiles(matrix.config) }}-
+          sccache-${{ runner.os }}-
+
     - name: Enable user namespaces
       run: |
         sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
