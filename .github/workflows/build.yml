@@ -47,21 +47,19 @@ jobs:
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           SELECTED="${{ github.event.inputs.config }}"
           echo "Manual trigger: selected config = $SELECTED"
-          
+
           if [ "$SELECTED" = "all" ]; then
-            # Build all yaml configs in root directory
             YAML_FILES=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort)
             for yaml_file in $YAML_FILES; do
               CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$yaml_file" '. + [$cfg]')
             done
           else
-            # Build specific config
             CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$SELECTED" '. + [$cfg]')
           fi
-          
+
           SHOULD_BUILD="true"
           echo "Manual build (no release): configs=$CONFIGS"
-          
+
         else
           # Handle push/PR - only build if version changed
           if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -80,7 +78,6 @@ jobs:
 
             CONFIG_NAME="${yaml_file%.yaml}"
 
-            # Parse version from yaml
             VERSION=$(yq '.env.KAS_RELEASE_VERSION // ""' "$yaml_file" 2>/dev/null || echo "")
             RELEASE_NAME=$(yq '.env.KAS_RELEASE_NAME // ""' "$yaml_file" 2>/dev/null || echo "")
 
@@ -89,7 +86,6 @@ jobs:
               continue
             fi
 
-            # Check if version changed (compare with previous commit)
             PREV_VERSION=""
             if git show HEAD^:"$yaml_file" >/dev/null 2>&1; then
               PREV_VERSION=$(git show HEAD^:"$yaml_file" | yq '.env.KAS_RELEASE_VERSION // ""' 2>/dev/null || echo "")
@@ -99,31 +95,39 @@ jobs:
             echo "Current version: $VERSION"
             echo "Previous version: $PREV_VERSION"
 
-            # Only build if version changed
             if [ "$VERSION" != "$PREV_VERSION" ]; then
               echo "✅ Version changed! Will build and release"
               SHOULD_BUILD="true"
               CONFIGS=$(echo "$CONFIGS" | jq --arg cfg "$yaml_file" '. + [$cfg]')
-              
+
               TAG_NAME="${CONFIG_NAME}-v${VERSION}"
-              
-              # Check if tag already exists
+
               if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
                 echo "Warning: Tag $TAG_NAME already exists, skipping release"
               else
-                # Extract release notes
                 NOTES_FILE=$(mktemp)
                 yq '.env.KAS_RELEASE_NOTES // ""' "$yaml_file" > "$NOTES_FILE" 2>/dev/null || echo "" > "$NOTES_FILE"
                 NOTES_CONTENT=$(cat "$NOTES_FILE")
                 rm -f "$NOTES_FILE"
-                
+
+                META_EMBEDLAB_URL=$(yq '.repos.meta-embedlab.url // ""' "$yaml_file" 2>/dev/null || echo "")
+                META_EMBEDLAB_BRANCH=$(yq '.repos.meta-embedlab.branch // "main"' "$yaml_file" 2>/dev/null || echo "main")
+
+                # Find previous tag for this config
+                PREV_TAG=$(git tag -l "${CONFIG_NAME}-v*" | sort -Vr | grep -v "$TAG_NAME" | head -n 1 || echo "")
+
+                echo "Previous tag: $PREV_TAG"
+                echo "Meta-embedlab URL: $META_EMBEDLAB_URL"
+
                 RELEASES=$(echo "$RELEASES" | jq \
                   --arg cfg "$yaml_file" \
                   --arg tag "$TAG_NAME" \
                   --arg name "$RELEASE_NAME" \
                   --arg version "$VERSION" \
                   --arg notes "$NOTES_CONTENT" \
-                  '. + [{"config": $cfg, "tag": $tag, "name": $name, "version": $version, "notes": $notes}]')
+                  --arg prev_tag "$PREV_TAG" \
+                  --arg meta_url "$META_EMBEDLAB_URL" \
+                  '. + [{"config": $cfg, "tag": $tag, "name": $name, "version": $version, "notes": $notes, "prev_tag": $prev_tag, "meta_url": $meta_url}]')
               fi
             else
               echo "⏭️ Version unchanged, skipping build"
@@ -180,6 +184,24 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
+    - name: Checkout layers with kas
+      run: |
+        kas checkout ${{ matrix.config }}
+
+    - name: Record meta-embedlab commit hash
+      id: meta-commit
+      run: |
+        if [ -d "layers/meta-embedlab" ]; then
+          META_COMMIT=$(cd layers/meta-embedlab && git rev-parse HEAD)
+          echo "meta_commit=$META_COMMIT" >> $GITHUB_OUTPUT
+          echo "Meta-embedlab commit: $META_COMMIT"
+          # Save to file for artifact
+          echo "$META_COMMIT" > build/meta-embedlab-commit.txt
+        else
+          echo "meta_commit=" >> $GITHUB_OUTPUT
+          echo "Warning: layers/meta-embedlab not found"
+        fi
+
     - name: Build with kas
       run: |
         kas build ${{ matrix.config }}
@@ -191,7 +213,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-artifacts-${{ matrix.config }}
-        path: build/tmp/deploy/images/
+        path: |
+          build/tmp/deploy/images/
+          build/meta-embedlab-commit.txt
         retention-days: 7
 
     - name: Show sccache stats
@@ -206,6 +230,8 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
 
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
@@ -225,14 +251,26 @@ jobs:
           NAME=$(echo "$release" | jq -r '.name')
           VERSION=$(echo "$release" | jq -r '.version')
           NOTES=$(echo "$release" | jq -r '.notes')
+          PREV_TAG=$(echo "$release" | jq -r '.prev_tag')
+          META_URL=$(echo "$release" | jq -r '.meta_url')
 
           echo "=== Creating release for $CONFIG ==="
           echo "Tag: $TAG"
           echo "Name: $NAME"
           echo "Version: $VERSION"
+          echo "Previous tag: $PREV_TAG"
+
+          # Get current meta-embedlab commit from artifact
+          ARTIFACT_DIR="artifacts/build-artifacts-$CONFIG"
+          CURRENT_META_COMMIT=""
+          META_COMMIT_FILE=""
+          if [ -f "$ARTIFACT_DIR/build/meta-embedlab-commit.txt" ]; then
+            CURRENT_META_COMMIT=$(cat "$ARTIFACT_DIR/build/meta-embedlab-commit.txt")
+            META_COMMIT_FILE="$ARTIFACT_DIR/build/meta-embedlab-commit.txt"
+            echo "Current meta-embedlab commit: $CURRENT_META_COMMIT"
+          fi
 
           # Prepare release assets
-          ARTIFACT_DIR="artifacts/build-artifacts-$CONFIG"
           RELEASE_DIR="release-assets-$TAG"
           mkdir -p "$RELEASE_DIR"
 
@@ -275,13 +313,74 @@ jobs:
             RELEASE_TITLE="$CONFIG_TITLE v$VERSION"
           fi
 
+          # Generate changelog from meta-embedlab
+          CHANGELOG=""
+          if [ -n "$META_URL" ] && [ "$META_URL" != "null" ] && [ -n "$CURRENT_META_COMMIT" ]; then
+            echo "=== Generating changelog from meta-embedlab ==="
+            
+            # Get previous meta-embedlab commit from previous release
+            PREV_META_COMMIT=""
+            if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "null" ]; then
+              # Try to get from previous release artifact (if stored as release asset)
+              PREV_META_COMMIT=$(gh release view "$PREV_TAG" --json assets --jq '.assets[] | select(.name == "meta-embedlab-commit.txt") | .url' 2>/dev/null | head -1 || echo "")
+              if [ -n "$PREV_META_COMMIT" ]; then
+                PREV_META_COMMIT=$(curl -sL "$PREV_META_COMMIT" 2>/dev/null || echo "")
+              fi
+              
+              # Alternative: check if we have a commit record file in the repo
+              if [ -z "$PREV_META_COMMIT" ] && [ -f ".release-commits/${PREV_TAG}.txt" ]; then
+                PREV_META_COMMIT=$(cat ".release-commits/${PREV_TAG}.txt" 2>/dev/null || echo "")
+              fi
+            fi
+            
+            echo "Previous meta-embedlab commit: $PREV_META_COMMIT"
+            
+            # Clone meta-embedlab to generate changelog
+            if [ -n "$PREV_META_COMMIT" ] && [ "$PREV_META_COMMIT" != "$CURRENT_META_COMMIT" ]; then
+              META_DIR=$(mktemp -d)
+              git clone --depth=0 "$META_URL" "$META_DIR" 2>/dev/null
+              
+              if [ -d "$META_DIR/.git" ]; then
+                cd "$META_DIR"
+                CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_META_COMMIT..$CURRENT_META_COMMIT" 2>/dev/null || echo "")
+                cd "$GITHUB_WORKSPACE"
+              fi
+              rm -rf "$META_DIR"
+              
+              echo "Changelog generated:"
+              echo "$CHANGELOG"
+            elif [ -z "$PREV_META_COMMIT" ]; then
+              echo "No previous commit found, this is the first release"
+              # For first release, show recent commits
+              META_DIR=$(mktemp -d)
+              git clone --depth=50 "$META_URL" "$META_DIR" 2>/dev/null
+              
+              if [ -d "$META_DIR/.git" ]; then
+                cd "$META_DIR"
+                CHANGELOG=$(git log --pretty=format:"- %s (%h)" -n 20 2>/dev/null || echo "")
+                cd "$GITHUB_WORKSPACE"
+              fi
+              rm -rf "$META_DIR"
+            fi
+          fi
+
           # Prepare release notes file
           NOTES_FILE=$(mktemp)
+          
           if [ -n "$NOTES" ] && [ "$NOTES" != "null" ]; then
             echo "$NOTES" > "$NOTES_FILE"
-          else
-            echo "" > "$NOTES_FILE"
           fi
+          
+          # Add changelog section
+          if [ -n "$CHANGELOG" ]; then
+            echo "" >> "$NOTES_FILE"
+            echo "## meta-embedlab 变更日志" >> "$NOTES_FILE"
+            echo "$CHANGELOG" >> "$NOTES_FILE"
+          fi
+
+          # Save meta-embedlab commit for future releases
+          mkdir -p .release-commits
+          echo "$CURRENT_META_COMMIT" > ".release-commits/${TAG}.txt"
 
           # Create and push tag
           git tag "$TAG" 2>/dev/null || echo "Tag $TAG already exists locally"
@@ -289,18 +388,25 @@ jobs:
 
           # Create GitHub release
           echo "Creating GitHub release: $RELEASE_TITLE"
+          
+          # Prepare assets list
+          ASSETS="${RELEASE_DIR}/*"
+          if [ -n "$META_COMMIT_FILE" ] && [ -f "$META_COMMIT_FILE" ]; then
+            ASSETS="$ASSETS $META_COMMIT_FILE"
+          fi
+          
           if [ -s "$NOTES_FILE" ]; then
             gh release create "$TAG" \
               --title "$RELEASE_TITLE" \
               --notes-file "$NOTES_FILE" \
               --target ${{ github.sha }} \
-              ${RELEASE_DIR}/*
+              $ASSETS
           else
             gh release create "$TAG" \
               --title "$RELEASE_TITLE" \
               --generate-notes \
               --target ${{ github.sha }} \
-              ${RELEASE_DIR}/*
+              $ASSETS
           fi
           rm -f "$NOTES_FILE"
 
