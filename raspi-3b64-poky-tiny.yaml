@@ -143,6 +143,10 @@ local_conf_header:
     ENABLE_UART = "1"
     KERNEL_MODULE_AUTOLOAD:append = " dwc2 usbnet smsc95xx"
 
+  # 压缩内核镜像（供 QEMU 使用）
+  kernel-compressed: |
+    KERNEL_IMAGETYPES += "Image.gz"
+
   # 多串口终端配置
   serial-console: |
     SERIAL_CONSOLES = "115200;ttyAMA0 115200;ttyS0"

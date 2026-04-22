@@ -355,8 +355,8 @@ jobs:
             # Copy bmap files
             find "$ARTIFACT_DIR" -type f -name "*.bmap" ! -name "*-1-*" -exec cp {} "$RELEASE_DIR/" \;
 
-            # Copy kernel (Image only, avoid versioned symlinks)
-            find "$ARTIFACT_DIR" -type f -name "Image" -exec cp {} "$RELEASE_DIR/" \;
+            # Copy kernel images (Image and Image.gz for QEMU)
+            find "$ARTIFACT_DIR" -type f \( -name "Image" -o -name "Image.gz" \) -exec cp {} "$RELEASE_DIR/" \;
 
             # Copy only essential dtb for RPi3B (avoid other models and versioned symlinks)
             find "$ARTIFACT_DIR" -type f \( \
