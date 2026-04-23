@@ -130,26 +130,16 @@ local_conf_header:
     USER_CLASSES = "buildstats"
     PATCHRESOLVE = "noop"
 
-  # 调试配置（无密码root登录）
+  # 使用 sysvinit 替代 mdev-busybox（支持 autologin）
+  init-manager: |
+    INIT_MANAGER = "sysvinit"
+
+  # 调试配置（无密码root自动登录）
   debug-access: |
-    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login post-install-logging"
+    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login serial-autologin-root post-install-logging"
     # initramfs 需要单独设置（IMAGE_FEATURES 对其不生效）
     IMAGE_FEATURES:pn-core-image-minimal-initramfs = "empty-root-password allow-empty-password allow-root-login"
     ROOT_PASSWORD = ""
-
-    # poky-tiny 使用 busybox login，需要强制设置空密码
-    # busybox login 默认不允许空密码，需要修改 /etc/passwd 和 /etc/shadow
-    ROOTFS_POSTPROCESS_COMMAND:append = " force_empty_root_password;"
-
-    force_empty_root_password() {
-      # 设置 root 密码为空（允许无密码登录）
-      if [ -e ${IMAGE_ROOTFS}/etc/shadow ]; then
-        sed -i 's/^root:[^:]*:/root::/' ${IMAGE_ROOTFS}/etc/shadow
-      fi
-      if [ -e ${IMAGE_ROOTFS}/etc/passwd ]; then
-        sed -i 's/^root:[^:]*:/root::/' ${IMAGE_ROOTFS}/etc/passwd
-      fi
-    }
 
   # 树莓派配置 - 保持内核编译
   rpi-config: |
