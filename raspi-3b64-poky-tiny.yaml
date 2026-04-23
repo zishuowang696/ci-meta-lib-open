@@ -79,10 +79,10 @@ repos:
   #     meta-poky:
   #     meta-yocto-bsp: disabled
 
-  # 5. EmbedLab 自定义层（最高优先级）
-  meta-embedlab:
-    url: https://github.com/zishuowang696/meta-embedlab.git
-    path: layers/meta-embedlab
+  # 5. TinyAi 自定义层（最高优先级）
+  meta-TinyAi:
+    url: https://github.com/zishuowang696/meta-TinyAi.git
+    path: layers/meta-TinyAi
     branch: main
 
 bblayers_conf_header:

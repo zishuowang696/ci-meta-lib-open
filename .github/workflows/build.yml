@@ -3,217 +3,77 @@ name: Build Yocto Image
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - '*.yaml'
+      - 'conf/**'
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
     inputs:
       config:
-        description: '选择要构建的配置'
-        required: true
-        type: choice
-        options:
-          - 'all'
-          - 'raspi-3b64-poky.yaml'
-          - 'raspi-3b64-poky-tiny.yaml'
+        description: 'KAS config file to build (e.g., 3b2.yaml, raspi-tiny.yaml). Leave empty to build all configs.'
+        required: false
+        default: ''
+        type: string
       create_release:
-        description: '是否创建Release'
-        required: true
-        type: choice
-        default: 'no'
-        options:
-          - 'no'
-          - 'yes'
+        description: 'Create a release after build'
+        required: false
+        default: false
+        type: boolean
+      release_tag:
+        description: 'Release tag (e.g., v1.0.0). Required if create_release is true.'
+        required: false
+        default: ''
+        type: string
 
 env:
   SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
   SCCACHE_CACHE_SIZE: 5G
 
 jobs:
-  detect-changes:
+  detect-configs:
     runs-on: ubuntu-latest
     outputs:
-      configs: ${{ steps.detect.outputs.configs }}
-      releases: ${{ steps.detect.outputs.releases }}
-      should_build: ${{ steps.detect.outputs.should_build }}
+      configs: ${{ steps.set-configs.outputs.configs }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
-    - name: Detect version changes or manual trigger
-      id: detect
+    - name: Determine which configs to build
+      id: set-configs
       run: |
-        # Install yq for YAML parsing
-        sudo snap install yq
-
-        CONFIGS="[]"
-        RELEASES="[]"
-        SHOULD_BUILD="false"
-
-        # Handle manual dispatch
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          SELECTED="${{ github.event.inputs.config }}"
-          CREATE_RELEASE="${{ github.event.inputs.create_release }}"
-          echo "Manual trigger: selected config = $SELECTED, create_release = $CREATE_RELEASE"
-
-          if [ "$SELECTED" = "all" ]; then
-            YAML_FILES=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort)
-            for yaml_file in $YAML_FILES; do
-              CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$yaml_file" '. + [$cfg]')
-            done
-          else
-            CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$SELECTED" '. + [$cfg]')
-          fi
-
-          SHOULD_BUILD="true"
-
-          # If user wants to create release, prepare release info
-          if [ "$CREATE_RELEASE" = "yes" ]; then
-            for yaml_file in $(echo "$CONFIGS" | jq -r '.[]'); do
-              if [ ! -f "$yaml_file" ]; then
-                continue
-              fi
-
-              CONFIG_NAME="${yaml_file%.yaml}"
-              VERSION=$(yq '.env.KAS_RELEASE_VERSION // ""' "$yaml_file" 2>/dev/null || echo "")
-              RELEASE_NAME=$(yq '.env.KAS_RELEASE_NAME // ""' "$yaml_file" 2>/dev/null || echo "")
-
-              if [ -z "$VERSION" ]; then
-                echo "Warning: No KAS_RELEASE_VERSION in $yaml_file, skipping release"
-                continue
-              fi
-
-              TAG_NAME="${CONFIG_NAME}-v${VERSION}"
-
-              # Check if tag already exists
-              if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
-                echo "Warning: Tag $TAG_NAME already exists, skipping release for $yaml_file"
-              else
-                NOTES_FILE=$(mktemp)
-                yq '.env.KAS_RELEASE_NOTES // ""' "$yaml_file" > "$NOTES_FILE" 2>/dev/null || echo "" > "$NOTES_FILE"
-                NOTES_CONTENT=$(cat "$NOTES_FILE")
-                rm -f "$NOTES_FILE"
-
-                META_EMBEDLAB_URL=$(yq '.repos.meta-embedlab.url // ""' "$yaml_file" 2>/dev/null || echo "")
-                PREV_TAG=$(git tag -l "${CONFIG_NAME}-v*" | sort -Vr | grep -v "$TAG_NAME" | head -n 1 || echo "")
-
-                RELEASES=$(echo "$RELEASES" | jq -c \
-                  --arg cfg "$yaml_file" \
-                  --arg tag "$TAG_NAME" \
-                  --arg name "$RELEASE_NAME" \
-                  --arg version "$VERSION" \
-                  --arg notes "$NOTES_CONTENT" \
-                  --arg prev_tag "$PREV_TAG" \
-                  --arg meta_url "$META_EMBEDLAB_URL" \
-                  '. + [{"config": $cfg, "tag": $tag, "name": $name, "version": $version, "notes": $notes, "prev_tag": $prev_tag, "meta_url": $meta_url}]')
-
-                echo "Will create release: $TAG_NAME"
-              fi
-            done
-          fi
-
-          echo "Manual build: configs=$CONFIGS, releases=$RELEASES"
-
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.config }}" ]; then
+          # Manual dispatch with specific config
+          CONFIGS='["${{ github.event.inputs.config }}"]'
+        elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # Tag push: build all yaml configs in root directory
+          CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
         else
-          # Handle push/PR - only build if version changed
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            YAML_FILES=$(git diff --name-only origin/${{ github.base_ref }} HEAD -- '*.yaml' | grep -E '^[^/]+\.yaml$' || true)
+          # Branch push or PR: auto-detect changed yaml files
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD 2>/dev/null || git diff --name-only --cached || echo "")
+          CHANGED_YAMLS=$(echo "$CHANGED_FILES" | grep -E '^[^/]+\.yaml$' || true)
+          if [ -n "$CHANGED_YAMLS" ]; then
+            CONFIGS=$(echo "$CHANGED_YAMLS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
-            YAML_FILES=$(git diff --name-only HEAD^ HEAD -- '*.yaml' | grep -E '^[^/]+\.yaml$' || true)
+            # Fallback to all yaml files if no specific change detected
+            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
           fi
-
-          echo "Changed YAML files: $YAML_FILES"
-
-          for yaml_file in $YAML_FILES; do
-            if [ ! -f "$yaml_file" ]; then
-              echo "Warning: $yaml_file not found, skipping"
-              continue
-            fi
-
-            CONFIG_NAME="${yaml_file%.yaml}"
-
-            VERSION=$(yq '.env.KAS_RELEASE_VERSION // ""' "$yaml_file" 2>/dev/null || echo "")
-            RELEASE_NAME=$(yq '.env.KAS_RELEASE_NAME // ""' "$yaml_file" 2>/dev/null || echo "")
-
-            if [ -z "$VERSION" ]; then
-              echo "No KAS_RELEASE_VERSION in $yaml_file, skipping"
-              continue
-            fi
-
-            PREV_VERSION=""
-            if git show HEAD^:"$yaml_file" >/dev/null 2>&1; then
-              PREV_VERSION=$(git show HEAD^:"$yaml_file" | yq '.env.KAS_RELEASE_VERSION // ""' 2>/dev/null || echo "")
-            fi
-
-            echo "Config: $CONFIG_NAME"
-            echo "Current version: $VERSION"
-            echo "Previous version: $PREV_VERSION"
-
-            if [ "$VERSION" != "$PREV_VERSION" ]; then
-              echo "✅ Version changed! Will build and release"
-              SHOULD_BUILD="true"
-              CONFIGS=$(echo "$CONFIGS" | jq -c --arg cfg "$yaml_file" '. + [$cfg]')
-
-              TAG_NAME="${CONFIG_NAME}-v${VERSION}"
-
-              if git tag -l "$TAG_NAME" | grep -q "$TAG_NAME"; then
-                echo "Warning: Tag $TAG_NAME already exists, skipping release"
-              else
-                NOTES_FILE=$(mktemp)
-                yq '.env.KAS_RELEASE_NOTES // ""' "$yaml_file" > "$NOTES_FILE" 2>/dev/null || echo "" > "$NOTES_FILE"
-                NOTES_CONTENT=$(cat "$NOTES_FILE")
-                rm -f "$NOTES_FILE"
-
-                META_EMBEDLAB_URL=$(yq '.repos.meta-embedlab.url // ""' "$yaml_file" 2>/dev/null || echo "")
-                META_EMBEDLAB_BRANCH=$(yq '.repos.meta-embedlab.branch // "main"' "$yaml_file" 2>/dev/null || echo "main")
-
-                # Find previous tag for this config
-                PREV_TAG=$(git tag -l "${CONFIG_NAME}-v*" | sort -Vr | grep -v "$TAG_NAME" | head -n 1 || echo "")
-
-                echo "Previous tag: $PREV_TAG"
-                echo "Meta-embedlab URL: $META_EMBEDLAB_URL"
-
-                RELEASES=$(echo "$RELEASES" | jq -c \
-                  --arg cfg "$yaml_file" \
-                  --arg tag "$TAG_NAME" \
-                  --arg name "$RELEASE_NAME" \
-                  --arg version "$VERSION" \
-                  --arg notes "$NOTES_CONTENT" \
-                  --arg prev_tag "$PREV_TAG" \
-                  --arg meta_url "$META_EMBEDLAB_URL" \
-                  '. + [{"config": $cfg, "tag": $tag, "name": $name, "version": $version, "notes": $notes, "prev_tag": $prev_tag, "meta_url": $meta_url}]')
-              fi
-            else
-              echo "⏭️ Version unchanged, skipping build"
-            fi
-          done
         fi
-
         echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
-        echo "releases=$RELEASES" >> $GITHUB_OUTPUT
-        echo "should_build=$SHOULD_BUILD" >> $GITHUB_OUTPUT
-        echo "=== Summary ==="
-        echo "Should build: $SHOULD_BUILD"
-        echo "Configs: $CONFIGS"
-        echo "Releases: $RELEASES"
+        echo "Building configs: $CONFIGS"
 
   build:
-    needs: detect-changes
-    if: needs.detect-changes.outputs.should_build == 'true'
+    needs: detect-configs
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        config: ${{ fromJson(needs.detect-changes.outputs.configs) }}
+        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
       fail-fast: false
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-
-    - name: Free disk space
-      uses: jlumbroso/free-disk-space@main
-      with:
-        android: true
 
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.6
@@ -224,19 +84,10 @@ jobs:
         path: |
           build/sstate-cache
           build/downloads
-        key: yocto-sstate-${{ runner.os }}-${{ matrix.config }}
+        key: yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-${{ github.sha }}
         restore-keys: |
-          yocto-sstate-${{ runner.os }}-
-          yocto-sstate-
-
-    - name: Cache sccache
-      uses: actions/cache@v4
-      with:
-        path: ${{ github.workspace }}/.cache/sccache
-        key: sccache-${{ runner.os }}-${{ matrix.config }}
-        restore-keys: |
-          sccache-${{ runner.os }}-
-          sccache-
+          yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-
+          yocto-${{ runner.os }}-
 
     - name: Enable user namespaces
       run: |
@@ -247,24 +98,6 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y kas chrpath diffstat python3-websockets
-
-    - name: Checkout layers with kas
-      run: |
-        kas checkout ${{ matrix.config }}
-
-    - name: Record meta-embedlab commit hash
-      id: meta-commit
-      run: |
-        if [ -d "layers/meta-embedlab" ]; then
-          META_COMMIT=$(cd layers/meta-embedlab && git rev-parse HEAD)
-          echo "meta_commit=$META_COMMIT" >> $GITHUB_OUTPUT
-          echo "Meta-embedlab commit: $META_COMMIT"
-          # Save to file for artifact
-          echo "$META_COMMIT" > build/meta-embedlab-commit.txt
-        else
-          echo "meta_commit=" >> $GITHUB_OUTPUT
-          echo "Warning: layers/meta-embedlab not found"
-        fi
 
     - name: Build with kas
       run: |
@@ -277,26 +110,19 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: build-artifacts-${{ matrix.config }}
-        path: |
-          build/tmp/deploy/images/
-          build/meta-embedlab-commit.txt
+        path: build/tmp/deploy/images/
         retention-days: 7
 
     - name: Show sccache stats
       run: sccache --show-stats || true
 
   release:
-    needs: [build, detect-changes]
-    if: needs.detect-changes.outputs.releases != '[]' && needs.detect-changes.outputs.releases != ''
+    needs: [build, detect-configs]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
     permissions:
       contents: write
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
     - name: Download all build artifacts
       uses: actions/download-artifact@v4
       with:
@@ -304,189 +130,96 @@ jobs:
         pattern: build-artifacts-*
         merge-multiple: false
 
-    - name: Create releases
+    - name: Prepare release assets
+      id: prepare
+      run: |
+        mkdir -p release-assets
+        # Process each artifact directory
+        for dir in artifacts/build-artifacts-*; do
+          if [ -d "$dir" ]; then
+            echo "Processing $dir..."
+            # Find and copy image files (.wic, .wic.xz, .ext4, .tar.xz, etc.)
+            find "$dir" -type f \( -name "*.wic" -o -name "*.wic.xz" -o -name "*.ext2" -o -name "*.ext2.xz" -o -name "*.ext3" -o -name "*.ext3.xz" -o -name "*.ext4" -o -name "*.ext4.xz" -o -name "*.tar.xz" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.rpi-sdimg" -o -name "*.rpi-sdimg.xz" \) -exec cp {} release-assets/ \;
+            # Copy bmap files if exist
+            find "$dir" -type f -name "*.bmap" -exec cp {} release-assets/ \;
+            # Copy device tree files
+            find "$dir" -type f -name "*.dtb" -exec cp {} release-assets/ \;
+            find "$dir" -type f -name "*.dtbo" -exec cp {} release-assets/ \;
+            # Copy kernel files
+            find "$dir" -type f \( -name "zImage*" -o -name "Image*" -o -name "vmlinux*" -o -name "kernel*" \) -exec cp {} release-assets/ \;
+            # Copy initramfs files
+            find "$dir" -type f \( -name "*.cpio.gz" -o -name "*.cpio*" -o -name "initramfs*" \) -exec cp {} release-assets/ \;
+          fi
+        done
+        # Show what we found
+        echo "=== Release assets ==="
+        ls -la release-assets/
+        echo "asset_count=$(ls -1 release-assets/ | wc -l)" >> $GITHUB_OUTPUT
+
+    - name: Create Release (without assets)
+      uses: softprops/action-gh-release@v2
+      with:
+        name: Release ${{ github.ref_name }}
+        tag: ${{ github.ref_name }}
+        generate_release_notes: true
+        fail_on_unmatched_files: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload assets with rate limit handling
+      run: |
+        ASSET_COUNT=${{ steps.prepare.outputs.asset_count }}
+        echo "Uploading $ASSET_COUNT assets with rate limit handling..."
+
+        UPLOADED=0
+        SKIPPED=0
+        FAILED=0
+        MAX_RETRIES=3
+
+        for file in release-assets/*; do
+          [ -f "$file" ] || continue
+          filename=$(basename "$file")
+
+          # Upload with retry
+          success=false
+          for attempt in $(seq 1 $MAX_RETRIES); do
+            echo "Uploading $filename (attempt $attempt/$MAX_RETRIES)..."
+
+            # Use --clobber to overwrite existing assets, or check first
+            if gh release upload "${{ github.ref_name }}" "$file" --clobber 2>/dev/null; then
+              echo "✅ Uploaded $filename"
+              ((UPLOADED++))
+              success=true
+              break
+            else
+              exit_code=$?
+              # Check if it's a rate limit error
+              if [ $exit_code -eq 1 ]; then
+                if [ $attempt -lt $MAX_RETRIES ]; then
+                  WAIT_TIME=$((10 * attempt))
+                  echo "⏳ Upload may have hit rate limit, waiting ${WAIT_TIME}s before retry..."
+                  sleep $WAIT_TIME
+                fi
+              fi
+            fi
+          done
+
+          if [ "$success" = false ]; then
+            echo "❌ Failed to upload $filename after $MAX_RETRIES attempts"
+            ((FAILED++))
+          fi
+
+          # Add delay between uploads to avoid secondary rate limits
+          sleep 1
+        done
+
+        echo ""
+        echo "=== Upload Summary ==="
+        echo "Uploaded: $UPLOADED"
+        echo "Failed: $FAILED"
+
+        if [ $FAILED -gt 0 ]; then
+          echo "::warning::Some assets failed to upload"
+        fi
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        RELEASES: ${{ needs.detect-changes.outputs.releases }}
-      run: |
-        echo "$RELEASES" | jq -c '.[]' | while read -r release; do
-          CONFIG=$(echo "$release" | jq -r '.config')
-          TAG=$(echo "$release" | jq -r '.tag')
-          NAME=$(echo "$release" | jq -r '.name')
-          VERSION=$(echo "$release" | jq -r '.version')
-          NOTES=$(echo "$release" | jq -r '.notes')
-          PREV_TAG=$(echo "$release" | jq -r '.prev_tag')
-          META_URL=$(echo "$release" | jq -r '.meta_url')
-
-          echo "=== Creating release for $CONFIG ==="
-          echo "Tag: $TAG"
-          echo "Name: $NAME"
-          echo "Version: $VERSION"
-          echo "Previous tag: $PREV_TAG"
-
-          # Get current meta-embedlab commit from artifact
-          ARTIFACT_DIR="artifacts/build-artifacts-$CONFIG"
-          CURRENT_META_COMMIT=""
-          META_COMMIT_FILE=""
-          if [ -f "$ARTIFACT_DIR/build/meta-embedlab-commit.txt" ]; then
-            CURRENT_META_COMMIT=$(cat "$ARTIFACT_DIR/build/meta-embedlab-commit.txt")
-            META_COMMIT_FILE="$ARTIFACT_DIR/build/meta-embedlab-commit.txt"
-            echo "Current meta-embedlab commit: $CURRENT_META_COMMIT"
-          fi
-
-          # Prepare release assets
-          RELEASE_DIR="release-assets-$TAG"
-          mkdir -p "$RELEASE_DIR"
-
-          if [ -d "$ARTIFACT_DIR" ]; then
-            echo "Processing artifacts from $ARTIFACT_DIR..."
-            
-            # Copy only essential image files (avoid versioned symlinks)
-            find "$ARTIFACT_DIR" -type f \( \
-              -name "*.rpi-sdimg" -o \
-              -name "*.rpi-sdimg.xz" -o \
-              -name "*.tar.gz" -o \
-              -name "*.tar.xz" -o \
-              -name "*.ext4" -o \
-              -name "*.ext4.xz" -o \
-              -name "*.cpio.gz" \
-            \) ! -name "*-1-*" ! -name "*+git*" -exec cp {} "$RELEASE_DIR/" \;
-
-            # Copy bmap files
-            find "$ARTIFACT_DIR" -type f -name "*.bmap" ! -name "*-1-*" -exec cp {} "$RELEASE_DIR/" \;
-
-            # Copy kernel images (Image and Image.gz for QEMU)
-            find "$ARTIFACT_DIR" -type f \( -name "Image" -o -name "Image.gz" \) -exec cp {} "$RELEASE_DIR/" \;
-
-            # Copy only essential dtb for RPi3B (avoid other models and versioned symlinks)
-            find "$ARTIFACT_DIR" -type f \( \
-              -name "bcm2710-rpi-3-b.dtb" -o \
-              -name "bcm2710-rpi-3-b-plus.dtb" -o \
-              -name "bcm2837-rpi-3-b.dtb" \
-            \) -exec cp {} "$RELEASE_DIR/" \;
-
-            # Optionally copy specific dtbo overlays if needed
-            find "$ARTIFACT_DIR" -type f \( \
-              -name "disable-bt.dtbo" -o \
-              -name "disable-wifi.dtbo" -o \
-              -name "uart0.dtbo" -o \
-              -name "uart1.dtbo" \
-            \) -exec cp {} "$RELEASE_DIR/" \;
-          fi
-
-          echo "=== Release assets for $TAG ==="
-          ls -la "$RELEASE_DIR/" || echo "No assets found"
-
-          ASSET_COUNT=$(ls -1 "$RELEASE_DIR/" 2>/dev/null | wc -l)
-          if [ "$ASSET_COUNT" -eq 0 ]; then
-            echo "Warning: No assets found for $CONFIG"
-            continue
-          fi
-
-          # Create release title
-          if [ -n "$NAME" ]; then
-            RELEASE_TITLE="$NAME v$VERSION"
-          else
-            CONFIG_TITLE=$(basename "$CONFIG" .yaml | sed 's/-/ /g' | sed 's/\b\(.\)/\u\1/g')
-            RELEASE_TITLE="$CONFIG_TITLE v$VERSION"
-          fi
-
-          # Generate changelog from meta-embedlab
-          CHANGELOG=""
-          if [ -n "$META_URL" ] && [ "$META_URL" != "null" ] && [ -n "$CURRENT_META_COMMIT" ]; then
-            echo "=== Generating changelog from meta-embedlab ==="
-            
-            # Get previous meta-embedlab commit from previous release
-            PREV_META_COMMIT=""
-            if [ -n "$PREV_TAG" ] && [ "$PREV_TAG" != "null" ]; then
-              # Try to get from previous release artifact (if stored as release asset)
-              PREV_META_COMMIT=$(gh release view "$PREV_TAG" --json assets --jq '.assets[] | select(.name == "meta-embedlab-commit.txt") | .url' 2>/dev/null | head -1 || echo "")
-              if [ -n "$PREV_META_COMMIT" ]; then
-                PREV_META_COMMIT=$(curl -sL "$PREV_META_COMMIT" 2>/dev/null || echo "")
-              fi
-              
-              # Alternative: check if we have a commit record file in the repo
-              if [ -z "$PREV_META_COMMIT" ] && [ -f ".release-commits/${PREV_TAG}.txt" ]; then
-                PREV_META_COMMIT=$(cat ".release-commits/${PREV_TAG}.txt" 2>/dev/null || echo "")
-              fi
-            fi
-            
-            echo "Previous meta-embedlab commit: $PREV_META_COMMIT"
-            
-            # Clone meta-embedlab to generate changelog
-            if [ -n "$PREV_META_COMMIT" ] && [ "$PREV_META_COMMIT" != "$CURRENT_META_COMMIT" ]; then
-              META_DIR=$(mktemp -d)
-              git clone --depth=0 "$META_URL" "$META_DIR" 2>/dev/null
-              
-              if [ -d "$META_DIR/.git" ]; then
-                cd "$META_DIR"
-                CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_META_COMMIT..$CURRENT_META_COMMIT" 2>/dev/null || echo "")
-                cd "$GITHUB_WORKSPACE"
-              fi
-              rm -rf "$META_DIR"
-              
-              echo "Changelog generated:"
-              echo "$CHANGELOG"
-            elif [ -z "$PREV_META_COMMIT" ]; then
-              echo "No previous commit found, this is the first release"
-              # For first release, show recent commits
-              META_DIR=$(mktemp -d)
-              git clone --depth=50 "$META_URL" "$META_DIR" 2>/dev/null
-              
-              if [ -d "$META_DIR/.git" ]; then
-                cd "$META_DIR"
-                CHANGELOG=$(git log --pretty=format:"- %s (%h)" -n 20 2>/dev/null || echo "")
-                cd "$GITHUB_WORKSPACE"
-              fi
-              rm -rf "$META_DIR"
-            fi
-          fi
-
-          # Prepare release notes file
-          NOTES_FILE=$(mktemp)
-          
-          if [ -n "$NOTES" ] && [ "$NOTES" != "null" ]; then
-            echo "$NOTES" > "$NOTES_FILE"
-          fi
-          
-          # Add changelog section
-          if [ -n "$CHANGELOG" ]; then
-            echo "" >> "$NOTES_FILE"
-            echo "## meta-embedlab 变更日志" >> "$NOTES_FILE"
-            echo "$CHANGELOG" >> "$NOTES_FILE"
-          fi
-
-          # Save meta-embedlab commit for future releases
-          mkdir -p .release-commits
-          echo "$CURRENT_META_COMMIT" > ".release-commits/${TAG}.txt"
-
-          # Create and push tag
-          git tag "$TAG" 2>/dev/null || echo "Tag $TAG already exists locally"
-          git push origin "$TAG" 2>/dev/null || echo "Tag $TAG already exists remotely"
-
-          # Create GitHub release
-          echo "Creating GitHub release: $RELEASE_TITLE"
-          
-          # Prepare assets list
-          ASSETS="${RELEASE_DIR}/*"
-          if [ -n "$META_COMMIT_FILE" ] && [ -f "$META_COMMIT_FILE" ]; then
-            ASSETS="$ASSETS $META_COMMIT_FILE"
-          fi
-          
-          if [ -s "$NOTES_FILE" ]; then
-            gh release create "$TAG" \
-              --title "$RELEASE_TITLE" \
-              --notes-file "$NOTES_FILE" \
-              --target ${{ github.sha }} \
-              $ASSETS
-          else
-            gh release create "$TAG" \
-              --title "$RELEASE_TITLE" \
-              --generate-notes \
-              --target ${{ github.sha }} \
-              $ASSETS
-          fi
-          rm -f "$NOTES_FILE"
-
-          echo "✅ Release $TAG created successfully"
-        done
