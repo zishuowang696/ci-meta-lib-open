@@ -23,10 +23,12 @@ repos:
   meta-raspberry:
 
   # 1. BitBake构建引擎（标记为禁用，不作为layer）
+  # 注意：bitbake 使用版本号分支，不使用代号分支
+  # Wrynose (6.0) LTS 对应 bitbake 2.18
   bitbake:
     url: https://git.openembedded.org/bitbake
     path: layers/bitbake
-    branch: whinlatter
+    branch: "2.18"
     layers:
       bitbake: disabled
 
@@ -34,7 +36,7 @@ repos:
   openembedded-core:
     url: https://git.openembedded.org/openembedded-core
     path: layers/openembedded-core
-    branch: whinlatter
+    branch: wrynose
     layers:
       meta:
 
@@ -42,16 +44,17 @@ repos:
   meta-yocto:
     url: https://git.yoctoproject.org/meta-yocto
     path: layers/meta-yocto
-    branch: whinlatter
+    branch: wrynose
     layers:
       meta-poky:
       meta-yocto-bsp: disabled
 
   # 4. 树莓派硬件层（你的目标机器）
+  # 注意：meta-raspberrypi 尚未发布 wrynose 分支，使用 whinlatter
   meta-raspberrypi:
     url: https://github.com/agherzan/meta-raspberrypi.git
     path: layers/meta-raspberrypi
-    branch: styhead
+    branch: whinlatter
 
   # 可选：如果你不需要下面这些层，可以删除或注释掉
   # 但为了保持与官方结构一致，保留并禁用也未尝不可
