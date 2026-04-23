@@ -26,7 +26,7 @@ repos:
   bitbake:
     url: https://git.openembedded.org/bitbake
     path: layers/bitbake
-    branch: master
+    branch: whinlatter
     layers:
       bitbake: disabled
 
@@ -34,7 +34,7 @@ repos:
   openembedded-core:
     url: https://git.openembedded.org/openembedded-core
     path: layers/openembedded-core
-    branch: master
+    branch: whinlatter
     layers:
       meta:
 
@@ -42,7 +42,7 @@ repos:
   meta-yocto:
     url: https://git.yoctoproject.org/meta-yocto
     path: layers/meta-yocto
-    branch: master
+    branch: whinlatter
     layers:
       meta-poky:
       meta-yocto-bsp: disabled
@@ -51,7 +51,7 @@ repos:
   meta-raspberrypi:
     url: https://github.com/agherzan/meta-raspberrypi.git
     path: layers/meta-raspberrypi
-    branch: master
+    branch: styhead
 
   # 可选：如果你不需要下面这些层，可以删除或注释掉
   # 但为了保持与官方结构一致，保留并禁用也未尝不可
