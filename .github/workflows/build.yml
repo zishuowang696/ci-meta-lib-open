@@ -1,26 +1,17 @@
 name: Build Yocto Image
 
 on:
-  push:
-    branches: [ main, master ]
-    paths:
-      - '*.yaml'
-      - 'conf/**'
-    tags:
-      - 'v*'
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       config:
-        description: 'KAS config file to build (e.g., 3b2.yaml, raspi-tiny.yaml). Leave empty to build all configs.'
+        description: 'KAS config file to build (e.g., raspi-3b64-poky.yaml). Leave empty to build all configs.'
         required: false
         default: ''
         type: string
       create_release:
         description: 'Create a release after build'
         required: false
-        default: false
+        default: true
         type: boolean
       release_tag:
         description: 'Release tag (e.g., v1.0.0). Required if create_release is true.'
@@ -74,6 +65,11 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+
+    - name: Free disk space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        android: true
 
     - name: Setup sccache
       uses: mozilla-actions/sccache-action@v0.0.6
@@ -161,9 +157,10 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           TAG="${{ github.event.inputs.release_tag }}"
+          # 如果没有指定 release_tag，自动生成（使用日期）
           if [ -z "$TAG" ]; then
-            echo "::error::release_tag is required when create_release is true"
-            exit 1
+            TAG="v$(date +%Y%m%d-%H%M%S)"
+            echo "Auto-generated release tag: $TAG"
           fi
         else
           TAG="${{ github.ref_name }}"
