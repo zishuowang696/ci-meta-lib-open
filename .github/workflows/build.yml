@@ -4,17 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       config:
-        description: 'KAS config file to build (e.g., raspi-3b64-poky.yaml). Leave empty to build all configs.'
-        required: false
-        default: ''
-        type: string
+        description: '选择要构建的配置'
+        required: true
+        type: choice
+        options:
+          - 'all'
+          - 'raspi-3b64-poky.yaml'
+          - 'raspi-3b64-poky-tiny.yaml'
       create_release:
-        description: 'Create a release after build'
-        required: false
-        default: true
-        type: boolean
+        description: '是否创建Release'
+        required: true
+        type: choice
+        default: 'yes'
+        options:
+          - 'yes'
+          - 'no'
       release_tag:
-        description: 'Release tag (e.g., v1.0.0). Required if create_release is true.'
+        description: 'Release tag (可选，留空自动生成)'
         required: false
         default: ''
         type: string
@@ -35,22 +41,13 @@ jobs:
     - name: Determine which configs to build
       id: set-configs
       run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.config }}" ]; then
-          # Manual dispatch with specific config
-          CONFIGS='["${{ github.event.inputs.config }}"]'
-        elif [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          # Tag push: build all yaml configs in root directory
+        SELECTED="${{ github.event.inputs.config }}"
+        echo "Selected config: $SELECTED"
+        
+        if [ "$SELECTED" = "all" ]; then
           CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
         else
-          # Branch push or PR: auto-detect changed yaml files
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD 2>/dev/null || git diff --name-only --cached || echo "")
-          CHANGED_YAMLS=$(echo "$CHANGED_FILES" | grep -E '^[^/]+\.yaml$' || true)
-          if [ -n "$CHANGED_YAMLS" ]; then
-            CONFIGS=$(echo "$CHANGED_YAMLS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          else
-            # Fallback to all yaml files if no specific change detected
-            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          fi
+          CONFIGS='["$SELECTED"]'
         fi
         echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
         echo "Building configs: $CONFIGS"
@@ -115,7 +112,7 @@ jobs:
   release:
     needs: [build, detect-configs]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes'
     permissions:
       contents: write
     steps:
@@ -155,15 +152,11 @@ jobs:
     - name: Determine release tag
       id: tag
       run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          TAG="${{ github.event.inputs.release_tag }}"
-          # 如果没有指定 release_tag，自动生成（使用日期）
-          if [ -z "$TAG" ]; then
-            TAG="v$(date +%Y%m%d-%H%M%S)"
-            echo "Auto-generated release tag: $TAG"
-          fi
-        else
-          TAG="${{ github.ref_name }}"
+        TAG="${{ github.event.inputs.release_tag }}"
+        # 如果没有指定 release_tag，自动生成（使用日期）
+        if [ -z "$TAG" ]; then
+          TAG="v$(date +%Y%m%d-%H%M%S)"
+          echo "Auto-generated release tag: $TAG"
         fi
         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
