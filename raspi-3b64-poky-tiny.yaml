@@ -137,6 +137,20 @@ local_conf_header:
     IMAGE_FEATURES:pn-core-image-minimal-initramfs = "empty-root-password allow-empty-password allow-root-login"
     ROOT_PASSWORD = ""
 
+    # poky-tiny 使用 busybox login，需要强制设置空密码
+    # busybox login 默认不允许空密码，需要修改 /etc/passwd 和 /etc/shadow
+    ROOTFS_POSTPROCESS_COMMAND:append = " force_empty_root_password;"
+
+    force_empty_root_password() {
+      # 设置 root 密码为空（允许无密码登录）
+      if [ -e ${IMAGE_ROOTFS}/etc/shadow ]; then
+        sed -i 's/^root:[^:]*:/root::/' ${IMAGE_ROOTFS}/etc/shadow
+      fi
+      if [ -e ${IMAGE_ROOTFS}/etc/passwd ]; then
+        sed -i 's/^root:[^:]*:/root::/' ${IMAGE_ROOTFS}/etc/passwd
+      fi
+    }
+
   # 树莓派配置 - 保持内核编译
   rpi-config: |
     IMAGE_FSTYPES:append = " rpi-sdimg tar.gz ext4"
