@@ -1,6 +1,15 @@
 name: Build Yocto Image
 
 on:
+  # 推送到 main 分支时自动构建
+  push:
+    branches:
+      - main
+    paths:
+      - '*.yaml'
+      - '.github/workflows/build.yml'
+
+  # 手动触发
   workflow_dispatch:
     inputs:
       config:
@@ -41,13 +50,18 @@ jobs:
     - name: Determine which configs to build
       id: set-configs
       run: |
-        SELECTED="${{ github.event.inputs.config }}"
-        echo "Selected config: $SELECTED"
-        
-        if [ "$SELECTED" = "all" ]; then
+        # push 事件自动构建所有配置，workflow_dispatch 使用选择的配置
+        if [ "${{ github.event_name }}" = "push" ]; then
           CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Push event: building all configs"
         else
-          CONFIGS='["$SELECTED"]'
+          SELECTED="${{ github.event.inputs.config }}"
+          echo "Selected config: $SELECTED"
+          if [ "$SELECTED" = "all" ]; then
+            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          else
+            CONFIGS='["$SELECTED"]'
+          fi
         fi
         echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
         echo "Building configs: $CONFIGS"
@@ -112,7 +126,8 @@ jobs:
   release:
     needs: [build, detect-configs]
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes'
+    # push 事件自动创建 release，workflow_dispatch 根据用户选择
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
       contents: write
     steps:
@@ -152,11 +167,16 @@ jobs:
     - name: Determine release tag
       id: tag
       run: |
-        TAG="${{ github.event.inputs.release_tag }}"
-        # 如果没有指定 release_tag，自动生成（使用日期）
-        if [ -z "$TAG" ]; then
+        # push 事件自动生成 tag，workflow_dispatch 使用用户指定的或自动生成
+        if [ "${{ github.event_name }}" = "push" ]; then
           TAG="v$(date +%Y%m%d-%H%M%S)"
-          echo "Auto-generated release tag: $TAG"
+          echo "Push event: auto-generated release tag: $TAG"
+        else
+          TAG="${{ github.event.inputs.release_tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="v$(date +%Y%m%d-%H%M%S)"
+            echo "Auto-generated release tag: $TAG"
+          fi
         fi
         echo "tag=$TAG" >> $GITHUB_OUTPUT
 
