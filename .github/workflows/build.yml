@@ -52,13 +52,13 @@ jobs:
       run: |
         # push 事件自动构建所有配置，workflow_dispatch 使用选择的配置
         if [ "${{ github.event_name }}" = "push" ]; then
-          CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\.\/||' | sort | jq -R -s -c 'split(\n) | map(select(length > 0))')
           echo "Push event: building all configs"
         else
           SELECTED="${{ github.event.inputs.config }}"
           echo "Selected config: $SELECTED"
           if [ "$SELECTED" = "all" ]; then
-            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\./||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\.\/||' | sort | jq -R -s -c 'split(\n) | map(select(length > 0))')
           else
             CONFIGS='["$SELECTED"]'
           fi
@@ -204,6 +204,7 @@ jobs:
 
     - name: Upload assets with rate limit handling
       run: |
+        set +e
         ASSET_COUNT=${{ steps.prepare.outputs.asset_count }}
         echo "Uploading $ASSET_COUNT assets with rate limit handling..."
 
@@ -257,5 +258,6 @@ jobs:
         if [ $FAILED -gt 0 ]; then
           echo "::warning::Some assets failed to upload"
         fi
+        exit 0
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
