@@ -151,18 +151,34 @@ jobs:
         for dir in artifacts/build-artifacts-*; do
           if [ -d "$dir" ]; then
             echo "Processing $dir..."
-            # Find and copy image files (.wic, .wic.xz, .ext4, .tar.xz, etc.)
-            find "$dir" -type f \( -name "*.wic" -o -name "*.wic.xz" -o -name "*.ext2" -o -name "*.ext2.xz" -o -name "*.ext3" -o -name "*.ext3.xz" -o -name "*.ext4" -o -name "*.ext4.xz" -o -name "*.tar.gz" -o -name "*.tar.xz" \) -exec cp {} release-assets/ \;
-            # Copy bmap files if exist
-            find "$dir" -type f -name "*.bmap" -exec cp {} release-assets/ \;
-            # Copy device tree files
-            find "$dir" -type f -name "*.dtb" -exec cp {} release-assets/ \;
-            # Copy dtbo files: only bluetooth and uart related
-            find "$dir" -type f -name "*.dtbo" | grep -E '(bt|miniuart|uart)' | while read f; do cp "$f" release-assets/; done
-            # Copy kernel files
-            find "$dir" -type f \( -name "zImage*" -o -name "Image*" -o -name "vmlinux*" -o -name "kernel*" \) -exec cp {} release-assets/ \;
-            # Copy initramfs files
-            find "$dir" -type f \( -name "*.cpio.gz" -o -name "*.cpio*" -o -name "initramfs*" \) -exec cp {} release-assets/ \;
+            config_name=$(basename "$dir" | sed 's/build-artifacts-//')
+            
+            # 1. 根文件系统镜像 (rpi-sdimg, ext4, tar.gz) - 只保留不带版本号的
+            find "$dir" -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
+              | grep -v '\-[0-9]\{8\}' \
+              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
+            
+            # 2. 内核镜像 (Image, Image.gz) - 只保留不带版本号的
+            find "$dir" -type f \( -name "Image" -o -name "Image.gz" \) \
+              | grep -v '\-[0-9]\{8\}' \
+              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
+            
+            # 3. 设备树 (dtb) - 只保留不带版本号的主 dtb
+            find "$dir" -type f -name "*.dtb" \
+              | grep -v '\-[0-9]\{8\}' \
+              | grep -E 'bcm2710-rpi' \
+              | while read f; do cp "$f" release-assets/$(basename "$f"); done
+            
+            # 4. dtbo - 只保留蓝牙和串口相关
+            find "$dir" -type f -name "*.dtbo" \
+              | grep -v '\-[0-9]\{8\}' \
+              | grep -E '(miniuart-bt|uart)' \
+              | while read f; do cp "$f" release-assets/$(basename "$f"); done
+            
+            # 5. initramfs - 只保留不带版本号的
+            find "$dir" -type f -name "*.cpio.gz" \
+              | grep -v '\-[0-9]\{8\}' \
+              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
           fi
         done
         # Show what we found
