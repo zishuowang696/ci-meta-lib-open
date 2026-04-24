@@ -6,9 +6,10 @@ header:
 # 机器配置（固定）
 machine: raspberrypi3-64
 
-# 发行版可通过环境变量切换，默认 poky
-# 用法: DISTRO=poky-tiny kas build raspi-3b64.yaml
-distro: ${DISTRO:poky}
+# 发行版通过环境变量设置（必须在构建时指定）
+# 用法: DISTRO=poky kas build raspi-3b64.yaml
+#       DISTRO=poky-tiny kas build raspi-3b64.yaml
+distro: ${DISTRO}
 
 # 目标镜像
 target:
