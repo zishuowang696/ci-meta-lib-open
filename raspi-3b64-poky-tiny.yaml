@@ -50,11 +50,11 @@ repos:
       meta-yocto-bsp: disabled
 
   # 4. 树莓派硬件层（你的目标机器）
-  # 注意：meta-raspberrypi 尚未发布 wrynose 分支，使用 whinlatter
+  # 使用固定 commit 确保构建稳定性
   meta-raspberrypi:
     url: https://github.com/agherzan/meta-raspberrypi.git
     path: layers/meta-raspberrypi
-    branch: whinlatter
+    refspec: b83766291188efb956c475b09c9666c2dfe2cb69
 
   # 可选：如果你不需要下面这些层，可以删除或注释掉
   # 但为了保持与官方结构一致，保留并禁用也未尝不可
