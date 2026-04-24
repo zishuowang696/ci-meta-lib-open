@@ -157,7 +157,8 @@ jobs:
             find "$dir" -type f -name "*.bmap" -exec cp {} release-assets/ \;
             # Copy device tree files
             find "$dir" -type f -name "*.dtb" -exec cp {} release-assets/ \;
-            find "$dir" -type f -name "*.dtbo" -exec cp {} release-assets/ \;
+            # Copy dtbo files: only bluetooth and uart related
+            find "$dir" -type f -name "*.dtbo" | grep -E '(bt|miniuart|uart)' | while read f; do cp "$f" release-assets/; done
             # Copy kernel files
             find "$dir" -type f \( -name "zImage*" -o -name "Image*" -o -name "vmlinux*" -o -name "kernel*" \) -exec cp {} release-assets/ \;
             # Copy initramfs files
