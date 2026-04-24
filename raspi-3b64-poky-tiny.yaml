@@ -1,0 +1,21 @@
+header:
+  version: 8
+  includes:
+    - configs/base.yaml
+
+machine: raspberrypi3-64
+distro: poky-tiny
+target:
+  - core-image-minimal
+
+local_conf_header:
+  # poky-tiny 特定优化
+  poky-tiny-optimizations: |
+    DOC_PACKAGES = ""
+    INHIBIT_PACKAGE_DEBUG_SPLIT = "1"
+    INHIBIT_PACKAGE_DEV_SPLIT = "1"
+    STATICDEV_PACKAGES = ""
+
+  # sysvinit 替代 mdev-busybox
+  init-manager: |
+    INIT_MANAGER = "sysvinit"
