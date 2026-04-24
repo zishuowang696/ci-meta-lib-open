@@ -60,7 +60,7 @@ jobs:
           if [ "$SELECTED" = "all" ]; then
             CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\.\/||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
           else
-            CONFIGS='["$SELECTED"]'
+            CONFIGS="[\"$SELECTED\"]"
           fi
         fi
         echo "configs=$CONFIGS" >> $GITHUB_OUTPUT

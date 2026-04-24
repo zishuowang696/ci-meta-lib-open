@@ -122,8 +122,8 @@ local_conf_header:
     # 减少日志
   
 
-    # poky-tiny 特定的最小化配置
-    IMAGE_FEATURES = ""
+    # poky-tiny 特定的最小化配置 - 不要清空 IMAGE_FEATURES
+    # IMAGE_FEATURES = "" 会导致 debug-access 中设置的登录特性被覆盖
 
   # 基础配置（采用官方写法）
   standard: |
@@ -139,10 +139,12 @@ local_conf_header:
 
   # 调试配置（无密码root自动登录）
   debug-access: |
-    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login serial-autologin-root post-install-logging"
-    # initramfs 需要单独设置（IMAGE_FEATURES 对其不生效）
+    # 登录特性
+    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login serial-autologin-root"
+    # 确保包含必要的登录工具
+    CORE_IMAGE_EXTRA_INSTALL += "shadow"
+    # initramfs 需要单独设置
     IMAGE_FEATURES:pn-core-image-minimal-initramfs = "empty-root-password allow-empty-password allow-root-login"
-    ROOT_PASSWORD = ""
 
   # 树莓派配置 - 保持内核编译
   rpi-config: |
