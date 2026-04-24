@@ -167,12 +167,15 @@ jobs:
             find "$dir" -type f -name "*.dtb" \
               | grep -v '\-[0-9]\{8\}' \
               | grep -E 'bcm2710-rpi' \
+              | grep -v 'rpi-2-b' \
+              | grep 'raspberrypi3-64' \
               | while read f; do cp "$f" release-assets/$(basename "$f"); done
             
             # 4. dtbo - 只保留蓝牙和串口相关
             find "$dir" -type f -name "*.dtbo" \
               | grep -v '\-[0-9]\{8\}' \
               | grep -E '(miniuart-bt|uart)' \
+              | grep 'raspberrypi3-64' \
               | while read f; do cp "$f" release-assets/$(basename "$f"); done
             
             # 5. initramfs - 只保留不带版本号的
