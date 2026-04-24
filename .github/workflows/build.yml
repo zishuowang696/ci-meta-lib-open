@@ -88,6 +88,7 @@ jobs:
         restore-keys: |
           yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('configs/base.yaml', 'raspi-3b64.yaml') }}-
           yocto-${{ runner.os }}-${{ matrix.distro }}-
+          yocto-${{ runner.os }}-
 
     - name: Enable user namespaces
       run: |
