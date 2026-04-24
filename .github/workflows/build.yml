@@ -6,7 +6,8 @@ on:
     branches:
       - main
     paths:
-      - 'configs/*.yaml'
+      - 'configs/base.yaml'
+      - 'raspi-3b64.yaml'
       - '.github/workflows/build.yml'
 
   # 手动触发
@@ -83,9 +84,9 @@ jobs:
         path: |
           build/sstate-cache
           build/downloads
-        key: yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('configs/base.yaml', 'configs/raspi-3b64.yaml') }}-${{ github.sha }}
+        key: yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('configs/base.yaml', 'raspi-3b64.yaml') }}-${{ github.sha }}
         restore-keys: |
-          yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('configs/base.yaml', 'configs/raspi-3b64.yaml') }}-
+          yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('configs/base.yaml', 'raspi-3b64.yaml') }}-
           yocto-${{ runner.os }}-${{ matrix.distro }}-
 
     - name: Enable user namespaces
@@ -100,7 +101,7 @@ jobs:
 
     - name: Build with kas
       run: |
-        DISTRO=${{ matrix.distro }} kas build configs/raspi-3b64.yaml
+        DISTRO=${{ matrix.distro }} kas build raspi-3b64.yaml
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
