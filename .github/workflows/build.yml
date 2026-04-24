@@ -12,14 +12,14 @@ on:
   # 手动触发
   workflow_dispatch:
     inputs:
-      config:
-        description: '选择要构建的配置'
+      distro:
+        description: '选择发行版'
         required: true
         type: choice
         options:
           - 'all'
-          - 'raspi-3b64-poky.yaml'
-          - 'raspi-3b64-poky-tiny.yaml'
+          - 'poky'
+          - 'poky-tiny'
       create_release:
         description: '是否创建Release'
         required: true
@@ -35,39 +35,38 @@ on:
         type: string
 
 jobs:
-  detect-configs:
+  detect-distros:
     runs-on: ubuntu-latest
     outputs:
-      configs: ${{ steps.set-configs.outputs.configs }}
+      distros: ${{ steps.set-distros.outputs.distros }}
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Determine which configs to build
-      id: set-configs
+    - name: Determine which distros to build
+      id: set-distros
       run: |
-        # push 事件自动构建所有配置，workflow_dispatch 使用选择的配置
         if [ "${{ github.event_name }}" = "push" ]; then
-          CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\.\/||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "Push event: building all configs"
+          DISTROS='["poky", "poky-tiny"]'
+          echo "Push event: building all distros"
         else
-          SELECTED="${{ github.event.inputs.config }}"
-          echo "Selected config: $SELECTED"
+          SELECTED="${{ github.event.inputs.distro }}"
+          echo "Selected distro: $SELECTED"
           if [ "$SELECTED" = "all" ]; then
-            CONFIGS=$(find . -maxdepth 1 -name "*.yaml" -type f | sed 's|^\.\/||' | sort | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            DISTROS='["poky", "poky-tiny"]'
           else
-            CONFIGS="[\"$SELECTED\"]"
+            DISTROS="[\"$SELECTED\"]"
           fi
         fi
-        echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
-        echo "Building configs: $CONFIGS"
+        echo "distros=$DISTROS" >> $GITHUB_OUTPUT
+        echo "Building distros: $DISTROS"
 
   build:
-    needs: detect-configs
+    needs: detect-distros
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
+        distro: ${{ fromJson(needs.detect-distros.outputs.distros) }}
       fail-fast: false
     steps:
     - name: Checkout repository
@@ -84,10 +83,10 @@ jobs:
         path: |
           build/sstate-cache
           build/downloads
-        key: yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-${{ github.sha }}
+        key: yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('base.yaml', 'raspi-3b64.yaml') }}-${{ github.sha }}
         restore-keys: |
-          yocto-${{ runner.os }}-${{ hashFiles(matrix.config) }}-
-          yocto-${{ runner.os }}-
+          yocto-${{ runner.os }}-${{ matrix.distro }}-${{ hashFiles('base.yaml', 'raspi-3b64.yaml') }}-
+          yocto-${{ runner.os }}-${{ matrix.distro }}-
 
     - name: Enable user namespaces
       run: |
@@ -101,26 +100,25 @@ jobs:
 
     - name: Build with kas
       run: |
-        kas build ${{ matrix.config }}
+        DISTRO=${{ matrix.distro }} kas build raspi-3b64.yaml
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts-${{ matrix.config }}
+        name: build-artifacts-${{ matrix.distro }}
         path: build/tmp/deploy/images/
         retention-days: 7
 
   release:
-    needs: [build, detect-configs]
+    needs: [build, detect-distros]
     runs-on: ubuntu-latest
-    # push 事件自动创建 release，workflow_dispatch 根据用户选择
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
       contents: write
     strategy:
       matrix:
-        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
-      max-parallel: 1  # 串行上传避免冲突
+        distro: ${{ fromJson(needs.detect-distros.outputs.distros) }}
+      max-parallel: 1
       fail-fast: false
     steps:
     - name: Checkout repository
@@ -128,52 +126,51 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Download build artifacts for ${{ matrix.config }}
+    - name: Download build artifacts for ${{ matrix.distro }}
       uses: actions/download-artifact@v4
       with:
-        name: build-artifacts-${{ matrix.config }}
+        name: build-artifacts-${{ matrix.distro }}
         path: artifacts
 
     - name: Prepare release assets
       id: prepare
       run: |
         mkdir -p release-assets
-        config_name="${{ matrix.config }}"
-        config_short="${config_name%.yaml}"
+        distro="${{ matrix.distro }}"
+        prefix="raspi-3b64-${distro}"
 
-        echo "Processing artifacts for $config_name..."
+        echo "Processing artifacts for ${distro}..."
 
-        # 1. 根文件系统镜像 (rpi-sdimg, ext4, tar.gz) - 只保留不带版本号的
+        # 1. 根文件系统镜像
         find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/${prefix}-$(basename "$f"); done
 
-        # 2. 内核镜像 (Image, Image.gz) - 只保留不带版本号的
+        # 2. 内核镜像
         find artifacts -type f \( -name "Image" -o -name "Image.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/${prefix}-$(basename "$f"); done
 
-        # 3. 设备树 (dtb) - 只保留不带版本号的主 dtb
+        # 3. 设备树 (dtb)
         find artifacts -type f -name "*.dtb" \
           | grep -v '\-[0-9]\{8\}' \
           | grep -E 'bcm2710-rpi' \
           | grep -v 'rpi-2-b' \
           | grep 'raspberrypi3-64' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/${prefix}-$(basename "$f"); done
 
-        # 4. dtbo - 只保留蓝牙和串口相关
+        # 4. dtbo
         find artifacts -type f -name "*.dtbo" \
           | grep -v '\-[0-9]\{8\}' \
           | grep -E '(miniuart-bt|uart)' \
           | grep 'raspberrypi3-64' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/${prefix}-$(basename "$f"); done
 
-        # 5. initramfs - 只保留不带版本号的
+        # 5. initramfs
         find artifacts -type f -name "*.cpio.gz" \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/${prefix}-$(basename "$f"); done
 
-        # Show what we found
         echo "=== Release assets ==="
         ls -la release-assets/
         echo "asset_count=$(ls -1 release-assets/ 2>/dev/null | wc -l)" >> $GITHUB_OUTPUT
@@ -181,15 +178,12 @@ jobs:
     - name: Determine release tag
       id: tag
       run: |
-        config_name="${{ matrix.config }}"
-        config_short="${config_name%.yaml}"
+        distro="${{ matrix.distro }}"
         timestamp=$(date +%Y%m%d-%H%M%S)
-
-        # 为每个配置生成独立的 tag
-        TAG="${config_short}-${timestamp}"
-        echo "Release tag for $config_name: $TAG"
+        TAG="raspi-3b64-${distro}-${timestamp}"
+        echo "Release tag: $TAG"
         echo "tag=$TAG" >> $GITHUB_OUTPUT
-        echo "config_short=$config_short" >> $GITHUB_OUTPUT
+        echo "distro=$distro" >> $GITHUB_OUTPUT
 
     - name: Create Git tag
       run: |
@@ -202,7 +196,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.tag.outputs.tag }}
-        name: Release ${{ steps.tag.outputs.config_short }} - ${{ steps.tag.outputs.tag }}
+        name: Release raspi-3b64-${{ steps.tag.outputs.distro }} - ${{ steps.tag.outputs.tag }}
         generate_release_notes: true
         fail_on_unmatched_files: false
         files: release-assets/*

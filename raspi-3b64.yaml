@@ -1,0 +1,29 @@
+header:
+  version: 8
+  includes:
+    - base.yaml
+
+# 机器配置（固定）
+machine: raspberrypi3-64
+
+# 发行版可通过环境变量切换，默认 poky
+# 用法: DISTRO=poky-tiny kas build raspi-3b64.yaml
+distro: ${DISTRO:poky}
+
+# 目标镜像
+target:
+  - core-image-minimal
+
+# 发行版特定配置（按 distro 名称条件应用）
+local_conf_header:
+  # poky-tiny 特定优化
+  poky-tiny-optimizations: |
+    # 仅在 poky-tiny 时生效的额外优化
+    DOC_PACKAGES = ""
+    INHIBIT_PACKAGE_DEBUG_SPLIT = "1"
+    INHIBIT_PACKAGE_DEV_SPLIT = "1"
+    STATICDEV_PACKAGES = ""
+
+  # init-manager: sysvinit 替代 mdev-busybox（poky-tiny 需要）
+  init-manager: |
+    INIT_MANAGER = "sysvinit"
