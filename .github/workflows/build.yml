@@ -34,10 +34,6 @@ on:
         default: ''
         type: string
 
-env:
-  SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
-  SCCACHE_CACHE_SIZE: 5G
-
 jobs:
   detect-configs:
     runs-on: ubuntu-latest
@@ -82,9 +78,6 @@ jobs:
       with:
         android: true
 
-    - name: Setup sccache
-      uses: mozilla-actions/sccache-action@v0.0.6
-
     - name: Cache Yocto sstate and downloads
       uses: actions/cache@v4
       with:
@@ -109,9 +102,6 @@ jobs:
     - name: Build with kas
       run: |
         kas build ${{ matrix.config }}
-      env:
-        SCCACHE_DIR: ${{ github.workspace }}/.cache/sccache
-        SCCACHE_CACHE_SIZE: 5G
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -119,9 +109,6 @@ jobs:
         name: build-artifacts-${{ matrix.config }}
         path: build/tmp/deploy/images/
         retention-days: 7
-
-    - name: Show sccache stats
-      run: sccache --show-stats || true
 
   release:
     needs: [build, detect-configs]

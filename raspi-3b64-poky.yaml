@@ -130,10 +130,9 @@ local_conf_header:
   
   # 调试配置（无密码root登录，方便QEMU串口）
   debug-access: |
-    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login post-install-logging"
+    IMAGE_FEATURES += "empty-root-password allow-empty-password allow-root-login serial-autologin-root"
     # initramfs 需要单独设置（IMAGE_FEATURES 对其不生效）
     IMAGE_FEATURES:pn-core-image-minimal-initramfs = "empty-root-password allow-empty-password allow-root-login"
-    ROOT_PASSWORD = ""
   
   # 最小化配置 + QEMU USB网络支持
   minimal-config: |
