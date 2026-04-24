@@ -78,7 +78,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Free disk space
-      uses: jlumbroso/free-disk-space@main
+      uses: jlumbroco/free-disk-space@main
       with:
         android: true
 
@@ -130,80 +130,79 @@ jobs:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
       contents: write
+    strategy:
+      matrix:
+        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
+      max-parallel: 1  # 串行上传避免冲突
+      fail-fast: false
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
 
-    - name: Download all build artifacts
+    - name: Download build artifacts for ${{ matrix.config }}
       uses: actions/download-artifact@v4
       with:
+        name: build-artifacts-${{ matrix.config }}
         path: artifacts
-        pattern: build-artifacts-*
-        merge-multiple: false
 
     - name: Prepare release assets
       id: prepare
       run: |
         mkdir -p release-assets
-        # Process each artifact directory
-        for dir in artifacts/build-artifacts-*; do
-          if [ -d "$dir" ]; then
-            echo "Processing $dir..."
-            config_name=$(basename "$dir" | sed 's/build-artifacts-//')
-            
-            # 1. 根文件系统镜像 (rpi-sdimg, ext4, tar.gz) - 只保留不带版本号的
-            find "$dir" -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
-              | grep -v '\-[0-9]\{8\}' \
-              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
-            
-            # 2. 内核镜像 (Image, Image.gz) - 只保留不带版本号的
-            find "$dir" -type f \( -name "Image" -o -name "Image.gz" \) \
-              | grep -v '\-[0-9]\{8\}' \
-              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
-            
-            # 3. 设备树 (dtb) - 只保留不带版本号的主 dtb
-            find "$dir" -type f -name "*.dtb" \
-              | grep -v '\-[0-9]\{8\}' \
-              | grep -E 'bcm2710-rpi' \
-              | grep -v 'rpi-2-b' \
-              | grep 'raspberrypi3-64' \
-              | while read f; do cp "$f" release-assets/$(basename "$f"); done
-            
-            # 4. dtbo - 只保留蓝牙和串口相关
-            find "$dir" -type f -name "*.dtbo" \
-              | grep -v '\-[0-9]\{8\}' \
-              | grep -E '(miniuart-bt|uart)' \
-              | grep 'raspberrypi3-64' \
-              | while read f; do cp "$f" release-assets/$(basename "$f"); done
-            
-            # 5. initramfs - 只保留不带版本号的
-            find "$dir" -type f -name "*.cpio.gz" \
-              | grep -v '\-[0-9]\{8\}' \
-              | while read f; do cp "$f" release-assets/${config_name}-$(basename "$f"); done
-          fi
-        done
+        config_name="${{ matrix.config }}"
+        config_short="${config_name%.yaml}"
+
+        echo "Processing artifacts for $config_name..."
+
+        # 1. 根文件系统镜像 (rpi-sdimg, ext4, tar.gz) - 只保留不带版本号的
+        find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
+          | grep -v '\-[0-9]\{8\}' \
+          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+
+        # 2. 内核镜像 (Image, Image.gz) - 只保留不带版本号的
+        find artifacts -type f \( -name "Image" -o -name "Image.gz" \) \
+          | grep -v '\-[0-9]\{8\}' \
+          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+
+        # 3. 设备树 (dtb) - 只保留不带版本号的主 dtb
+        find artifacts -type f -name "*.dtb" \
+          | grep -v '\-[0-9]\{8\}' \
+          | grep -E 'bcm2710-rpi' \
+          | grep -v 'rpi-2-b' \
+          | grep 'raspberrypi3-64' \
+          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+
+        # 4. dtbo - 只保留蓝牙和串口相关
+        find artifacts -type f -name "*.dtbo" \
+          | grep -v '\-[0-9]\{8\}' \
+          | grep -E '(miniuart-bt|uart)' \
+          | grep 'raspberrypi3-64' \
+          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+
+        # 5. initramfs - 只保留不带版本号的
+        find artifacts -type f -name "*.cpio.gz" \
+          | grep -v '\-[0-9]\{8\}' \
+          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+
         # Show what we found
         echo "=== Release assets ==="
         ls -la release-assets/
-        echo "asset_count=$(ls -1 release-assets/ | wc -l)" >> $GITHUB_OUTPUT
+        echo "asset_count=$(ls -1 release-assets/ 2>/dev/null | wc -l)" >> $GITHUB_OUTPUT
 
     - name: Determine release tag
       id: tag
       run: |
-        # push 事件自动生成 tag，workflow_dispatch 使用用户指定的或自动生成
-        if [ "${{ github.event_name }}" = "push" ]; then
-          TAG="v$(date +%Y%m%d-%H%M%S)"
-          echo "Push event: auto-generated release tag: $TAG"
-        else
-          TAG="${{ github.event.inputs.release_tag }}"
-          if [ -z "$TAG" ]; then
-            TAG="v$(date +%Y%m%d-%H%M%S)"
-            echo "Auto-generated release tag: $TAG"
-          fi
-        fi
+        config_name="${{ matrix.config }}"
+        config_short="${config_name%.yaml}"
+        timestamp=$(date +%Y%m%d-%H%M%S)
+
+        # 为每个配置生成独立的 tag
+        TAG="${config_short}-${timestamp}"
+        echo "Release tag for $config_name: $TAG"
         echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "config_short=$config_short" >> $GITHUB_OUTPUT
 
     - name: Create Git tag
       run: |
@@ -216,68 +215,9 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.tag.outputs.tag }}
-        name: Release ${{ steps.tag.outputs.tag }}
+        name: Release ${{ steps.tag.outputs.config_short }} - ${{ steps.tag.outputs.tag }}
         generate_release_notes: true
         fail_on_unmatched_files: false
+        files: release-assets/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload assets with rate limit handling
-      run: |
-        set +e
-        ASSET_COUNT=${{ steps.prepare.outputs.asset_count }}
-        echo "Uploading $ASSET_COUNT assets with rate limit handling..."
-
-        UPLOADED=0
-        SKIPPED=0
-        FAILED=0
-        MAX_RETRIES=3
-
-        for file in release-assets/*; do
-          [ -f "$file" ] || continue
-          filename=$(basename "$file")
-
-          # Upload with retry
-          success=false
-          for attempt in $(seq 1 $MAX_RETRIES); do
-            echo "Uploading $filename (attempt $attempt/$MAX_RETRIES)..."
-
-            # Use --clobber to overwrite existing assets, or check first
-            if gh release upload "${{ steps.tag.outputs.tag }}" "$file" --clobber 2>/dev/null; then
-              echo "✅ Uploaded $filename"
-              ((UPLOADED++))
-              success=true
-              break
-            else
-              exit_code=$?
-              # Check if it's a rate limit error
-              if [ $exit_code -eq 1 ]; then
-                if [ $attempt -lt $MAX_RETRIES ]; then
-                  WAIT_TIME=$((10 * attempt))
-                  echo "⏳ Upload may have hit rate limit, waiting ${WAIT_TIME}s before retry..."
-                  sleep $WAIT_TIME
-                fi
-              fi
-            fi
-          done
-
-          if [ "$success" = false ]; then
-            echo "❌ Failed to upload $filename after $MAX_RETRIES attempts"
-            ((FAILED++))
-          fi
-
-          # Add delay between uploads to avoid secondary rate limits
-          sleep 1
-        done
-
-        echo ""
-        echo "=== Upload Summary ==="
-        echo "Uploaded: $UPLOADED"
-        echo "Failed: $FAILED"
-
-        if [ $FAILED -gt 0 ]; then
-          echo "::warning::Some assets failed to upload"
-        fi
-        exit 0
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
