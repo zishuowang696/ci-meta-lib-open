@@ -130,61 +130,65 @@ jobs:
       run: |
         mkdir -p release-assets
         config_name="${{ matrix.config }}"
-        config_short="${config_name%.yaml}"
+
+        # 包含 kas 配置文件
+        cp "${{ matrix.config }}" release-assets/
+        cp configs/base.yaml release-assets/
 
         # 根文件系统镜像
         find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
         # 内核镜像
         find artifacts -type f \( -name "Image" -o -name "Image.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
-        # 设备树
+        # 设备树（去重：排除带 -raspberrypi3-64 后缀的 symlink）
         find artifacts -type f -name "*.dtb" \
           | grep -v '\-[0-9]\{8\}' \
           | grep -E 'bcm2710-rpi' \
           | grep -v 'rpi-2-b' \
           | grep 'raspberrypi3-64' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | grep -v '\-raspberrypi3-64\.dtb$' \
+          | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
-        # dtbo
+        # dtbo（去重）
         find artifacts -type f -name "*.dtbo" \
           | grep -v '\-[0-9]\{8\}' \
           | grep -E '(miniuart-bt|uart)' \
           | grep 'raspberrypi3-64' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | grep -v '\-raspberrypi3-64\.dtbo$' \
+          | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
         # initramfs
         find artifacts -type f -name "*.cpio.gz" \
           | grep -v '\-[0-9]\{8\}' \
-          | while read f; do cp "$f" release-assets/${config_short}-$(basename "$f"); done
+          | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
         echo "asset_count=$(ls -1 release-assets/ 2>/dev/null | wc -l)" >> $GITHUB_OUTPUT
 
     - name: Create release tag
       id: tag
       run: |
-        config_short="${{ matrix.config }}"
-        config_short="${config_short%.yaml}"
+        config_name="${{ matrix.config }}"
         timestamp=$(date +%Y%m%d-%H%M%S)
-        echo "tag=${config_short}-${timestamp}" >> $GITHUB_OUTPUT
-        echo "config_short=$config_short" >> $GITHUB_OUTPUT
+        echo "tag=${config_name}-${timestamp}" >> $GITHUB_OUTPUT
+        echo "config_name=${config_name}" >> $GITHUB_OUTPUT
 
     - name: Create Git tag
       run: |
         git config user.name "github-actions"
         git config user.email "github-actions@github.com"
-        git tag ${{ steps.tag.outputs.tag }}
-        git push origin ${{ steps.tag.outputs.tag }}
+        git tag "${{ steps.tag.outputs.tag }}"
+        git push origin "${{ steps.tag.outputs.tag }}"
 
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.tag.outputs.tag }}
-        name: Release ${{ steps.tag.outputs.config_short }} - ${{ steps.tag.outputs.tag }}
+        name: Release ${{ steps.tag.outputs.config_name }} - ${{ steps.tag.outputs.tag }}
         generate_release_notes: true
         fail_on_unmatched_files: false
         files: release-assets/*
