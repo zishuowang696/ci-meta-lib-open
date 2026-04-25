@@ -17,6 +17,5 @@ local_conf_header:
     # 捆绑模式：将 initramfs 嵌入内核
     INITRAMFS_IMAGE_BUNDLE = "0"
 
-    # 非捆绑模式：单独输出 cpio.gz 文件
-    # 即使 BUNDLE=1，Yocto 仍然会生成独立的 initramfs 文件
-    INITRAMFS_FSTYPES = "cpio.gz"
+    # 仅对 initramfs 覆盖 FSTYPES，避开 base.yaml 的 :append（防止产生多余 ext4/rpi-sdimg）
+    IMAGE_FSTYPES:pn-core-image-minimal-initramfs = "cpio.gz"
