@@ -7,3 +7,8 @@ machine: raspberrypi3-64
 distro: poky
 target:
   - core-image-minimal
+
+local_conf_header:
+  # initramfs 配置（不 bundle 进内核，仅生成独立 cpio.gz）
+  initramfs: |
+    INITRAMFS_IMAGE = "core-image-minimal-initramfs"

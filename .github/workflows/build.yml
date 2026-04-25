@@ -131,10 +131,6 @@ jobs:
         mkdir -p release-assets
         config_name="${{ matrix.config }}"
 
-        # 包含 kas 配置文件
-        cp "${{ matrix.config }}" release-assets/
-        cp configs/base.yaml release-assets/
-
         # 根文件系统镜像
         find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
