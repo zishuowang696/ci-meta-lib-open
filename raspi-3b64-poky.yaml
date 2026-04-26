@@ -17,6 +17,7 @@ local_conf_header:
   # RPi 3B WiFi 支持（仅 base 镜像）
   wifi-support: |
     IMAGE_INSTALL:append:pn-core-image-base = " linux-firmware-bcm43430 wpa-supplicant"
+    LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
 
   # initramfs 配置
   initramfs-config: |
