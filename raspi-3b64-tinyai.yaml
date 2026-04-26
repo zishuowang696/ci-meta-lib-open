@@ -8,6 +8,12 @@ distro: tinyai
 target:
   - core-image-base
 
+repos:
+  meta-openrc:
+    url: https://github.com/jsbronder/meta-openrc.git
+    path: layers/meta-openrc
+    refspec: 7bfd4cc
+
 local_conf_header:
   # 一键 demo 脚本（llama-cpp 已由 tinyai distro 自动包含）
   tinyai-demo: |
