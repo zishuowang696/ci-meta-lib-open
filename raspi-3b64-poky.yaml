@@ -7,19 +7,19 @@ machine: raspberrypi3-64
 distro: poky
 target:
   - core-image-minimal
+  - core-image-base
 
 local_conf_header:
   # 集成 llama-cpp (LLM 推理) + 一键 demo 脚本
   llama-cpp: |
     IMAGE_INSTALL:append = " llama-cpp tinyai-demo"
 
+  # RPi 3B WiFi 支持（仅 base 镜像）
+  wifi-support: |
+    IMAGE_INSTALL:append:pn-core-image-base = " linux-firmware-bcm43430 wpa-supplicant"
+
   # initramfs 配置
   initramfs-config: |
-    # 指定用于生成 initramfs 的镜像
     INITRAMFS_IMAGE = "core-image-minimal-initramfs"
-
-    # 捆绑模式：将 initramfs 嵌入内核
     INITRAMFS_IMAGE_BUNDLE = "0"
-
-    # 仅对 initramfs 覆盖 FSTYPES，避开 base.yaml 的 :append（防止产生多余 ext4/rpi-sdimg）
     IMAGE_FSTYPES:pn-core-image-minimal-initramfs = "cpio.gz"
