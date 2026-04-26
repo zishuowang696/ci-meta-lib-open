@@ -73,6 +73,7 @@ jobs:
     - name: Cache Yocto sstate and downloads
       uses: actions/cache@v4
       with:
+        save-always: true
         path: |
           build/sstate-cache
           build/downloads
