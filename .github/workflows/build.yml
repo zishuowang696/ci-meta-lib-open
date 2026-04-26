@@ -153,7 +153,7 @@ jobs:
         # dtbo（去重）
         find artifacts -type f -name "*.dtbo" \
           | grep -v '\-[0-9]\{8\}' \
-          | grep -E '(miniuart-bt|uart)' \
+          | grep -E '(disable-bt|miniuart-bt|pi3-miniuart-bt)' \
           | grep 'raspberrypi3-64' \
           | grep -v '\-raspberrypi3-64\.dtbo$' \
           | while read f; do cp "$f" release-assets/$(basename "$f"); done
