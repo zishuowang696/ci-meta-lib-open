@@ -70,18 +70,21 @@ jobs:
       with:
         android: true
 
-    - name: Cache Yocto sstate and downloads
+    - name: Cache Yocto downloads
+      uses: actions/cache@v4
+      with:
+        path: build/downloads
+        key: yocto-downloads-${{ runner.os }}-${{ hashFiles('configs/base.yaml') }}
+
+    - name: Cache Yocto sstate
       uses: actions/cache@v4
       with:
         save-always: true
-        path: |
-          build/sstate-cache
-          build/downloads
-        key: yocto-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-${{ github.sha }}
+        path: build/sstate-cache
+        key: yocto-sstate-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-${{ github.sha }}
         restore-keys: |
-          yocto-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-
-          yocto-${{ runner.os }}-${{ matrix.config }}-
-          yocto-${{ runner.os }}-
+          yocto-sstate-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-
+          yocto-sstate-${{ runner.os }}-${{ matrix.config }}-
 
     - name: Enable user namespaces
       run: |
