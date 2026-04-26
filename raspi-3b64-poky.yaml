@@ -9,9 +9,9 @@ target:
   - core-image-minimal
 
 local_conf_header:
-  # 集成 llama-cpp (LLM 推理)
+  # 集成 llama-cpp (LLM 推理) + 一键 demo 脚本
   llama-cpp: |
-    IMAGE_INSTALL:append = " llama-cpp"
+    IMAGE_INSTALL:append = " llama-cpp tinyai-demo"
 
   # initramfs 配置
   initramfs-config: |
