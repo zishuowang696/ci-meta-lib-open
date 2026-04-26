@@ -6,7 +6,6 @@ header:
 machine: raspberrypi3-64
 distro: tinyai
 target:
-  - core-image-minimal
   - core-image-base
 
 local_conf_header:
