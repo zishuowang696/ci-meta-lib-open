@@ -8,6 +8,7 @@ on:
       - 'configs/base.yaml'
       - 'raspi-3b64-poky.yaml'
       - 'raspi-3b64-poky-tiny.yaml'
+      - 'raspi-3b64-tinyai.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
@@ -20,6 +21,7 @@ on:
           - 'all'
           - 'raspi-3b64-poky.yaml'
           - 'raspi-3b64-poky-tiny.yaml'
+          - 'raspi-3b64-tinyai.yaml'
       create_release:
         description: '是否创建Release'
         required: true
@@ -42,12 +44,12 @@ jobs:
       id: set-configs
       run: |
         if [ "${{ github.event_name }}" = "push" ]; then
-          CONFIGS='["raspi-3b64-poky.yaml", "raspi-3b64-poky-tiny.yaml"]'
+          CONFIGS='["raspi-3b64-poky.yaml", "raspi-3b64-poky-tiny.yaml", "raspi-3b64-tinyai.yaml"]'
           echo "Push event: building all configs"
         else
           SELECTED="${{ github.event.inputs.config }}"
           if [ "$SELECTED" = "all" ]; then
-            CONFIGS='["raspi-3b64-poky.yaml", "raspi-3b64-poky-tiny.yaml"]'
+            CONFIGS='["raspi-3b64-poky.yaml", "raspi-3b64-poky-tiny.yaml", "raspi-3b64-tinyai.yaml"]'
           else
             CONFIGS="[\"$SELECTED\"]"
           fi
