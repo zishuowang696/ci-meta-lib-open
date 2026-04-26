@@ -59,6 +59,7 @@ jobs:
   build:
     needs: detect-configs
     runs-on: ubuntu-latest
+    timeout-minutes: 480
     strategy:
       matrix:
         config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
@@ -75,18 +76,18 @@ jobs:
     - name: Cache Yocto downloads
       uses: actions/cache@v4
       with:
+        save-always: true
         path: build/downloads
-        key: yocto-downloads-${{ runner.os }}-${{ hashFiles('configs/base.yaml') }}
+        key: yocto-downloads-v1-${{ runner.os }}
 
     - name: Cache Yocto sstate
       uses: actions/cache@v4
       with:
         save-always: true
         path: build/sstate-cache
-        key: yocto-sstate-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-${{ github.sha }}
+        key: yocto-sstate-v1-${{ runner.os }}-${{ matrix.config }}
         restore-keys: |
-          yocto-sstate-${{ runner.os }}-${{ matrix.config }}-${{ hashFiles('configs/base.yaml') }}-
-          yocto-sstate-${{ runner.os }}-${{ matrix.config }}-
+          yocto-sstate-v1-${{ runner.os }}-
 
     - name: Enable user namespaces
       run: |
