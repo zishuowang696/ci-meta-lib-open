@@ -9,6 +9,10 @@ target:
   - core-image-minimal
 
 local_conf_header:
+  # 集成 llama-cpp (LLM 推理)
+  llama-cpp: |
+    IMAGE_INSTALL:append = " llama-cpp"
+
   # poky-tiny 特定优化
   poky-tiny-optimizations: |
     DOC_PACKAGES = ""

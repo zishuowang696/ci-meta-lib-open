@@ -9,6 +9,10 @@ target:
   - core-image-minimal
 
 local_conf_header:
+  # 集成 llama-cpp (LLM 推理)
+  llama-cpp: |
+    IMAGE_INSTALL:append = " llama-cpp"
+
   # initramfs 配置
   initramfs-config: |
     # 指定用于生成 initramfs 的镜像
