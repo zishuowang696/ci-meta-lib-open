@@ -34,6 +34,14 @@ repos:
     path: layers/meta-raspberrypi
     refspec: b83766291188efb956c475b09c9666c2dfe2cb69
 
+  # OpenEmbedded 元层（提供 adbd/android-tools 等扩展包）
+  meta-openembedded:
+    url: https://github.com/openembedded/meta-openembedded.git
+    path: layers/meta-openembedded
+    branch: master
+    layers:
+      meta-oe:
+
   # TinyAi 自定义层
   meta-TinyAi:
     url: https://github.com/zishuowang696/meta-TinyAi.git
