@@ -60,7 +60,9 @@ jobs:
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
     - name: Build base system (kernel + minimal rootfs)
-      run: kas shell raspi-3b64-tinyai.yaml -- bitbake core-image-minimal
+      run: |
+        sed 's/  - tinyai-core-image-base/  - core-image-minimal/' raspi-3b64-tinyai.yaml > /tmp/tinyai-base.yaml
+        kas build /tmp/tinyai-base.yaml
 
     - name: Build full image
       run: kas build raspi-3b64-tinyai.yaml
