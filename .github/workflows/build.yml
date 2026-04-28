@@ -7,6 +7,7 @@ on:
     paths:
       - 'configs/base.yaml'
       - 'raspi-3b64-tinyai.yaml'
+      - 'raspi-3b64-tinyai-kernel.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
@@ -60,10 +61,7 @@ jobs:
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
     - name: Build kernel (heaviest component — reused by full image via sstate)
-      run: |
-        sed 's/  - tinyai-core-image-base/  - virtual\/kernel/' raspi-3b64-tinyai.yaml > tinyai-kernel-temp.yaml
-        kas build tinyai-kernel-temp.yaml
-        rm tinyai-kernel-temp.yaml
+      run: kas build raspi-3b64-tinyai-kernel.yaml
 
     - name: Build full image
       run: kas build raspi-3b64-tinyai.yaml
