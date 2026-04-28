@@ -7,19 +7,10 @@ on:
     paths:
       - 'configs/base.yaml'
       - 'raspi-3b64-tinyai.yaml'
-      - 'raspi-3b64-tinyai-base.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
     inputs:
-      config:
-        description: '选择要构建的配置'
-        required: true
-        type: choice
-        options:
-          - 'all'
-          - 'raspi-3b64-tinyai.yaml'
-          - 'raspi-3b64-tinyai-base.yaml'
       create_release:
         description: '是否创建Release'
         required: true
@@ -30,38 +21,9 @@ on:
           - 'no'
 
 jobs:
-  detect-configs:
-    runs-on: ubuntu-latest
-    outputs:
-      configs: ${{ steps.set-configs.outputs.configs }}
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Determine which configs to build
-      id: set-configs
-      run: |
-        if [ "${{ github.event_name }}" = "push" ]; then
-          CONFIGS='["raspi-3b64-tinyai.yaml", "raspi-3b64-tinyai-base.yaml"]'
-          echo "Push event: building all configs"
-        else
-          SELECTED="${{ github.event.inputs.config }}"
-          if [ "$SELECTED" = "all" ]; then
-            CONFIGS='["raspi-3b64-tinyai.yaml", "raspi-3b64-tinyai-base.yaml"]'
-          else
-            CONFIGS="[\"$SELECTED\"]"
-          fi
-        fi
-        echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
-
   build:
-    needs: detect-configs
     runs-on: ubuntu-latest
     timeout-minutes: 480
-    strategy:
-      matrix:
-        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
-      fail-fast: false
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -83,7 +45,7 @@ jobs:
       with:
         save-always: true
         path: build/sstate-cache
-        key: yocto-sstate-v1-${{ runner.os }}-${{ matrix.config }}
+        key: yocto-sstate-v1-${{ runner.os }}-tinyai
         restore-keys: |
           yocto-sstate-v1-${{ runner.os }}-
 
@@ -98,26 +60,21 @@ jobs:
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
     - name: Build with kas
-      run: kas build ${{ matrix.config }}
+      run: kas build raspi-3b64-tinyai.yaml
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: build-artifacts-${{ matrix.config }}
+        name: build-artifacts
         path: build/tmp/deploy/images/
         retention-days: 7
 
   release:
-    needs: [build, detect-configs]
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
       contents: write
-    strategy:
-      matrix:
-        config: ${{ fromJson(needs.detect-configs.outputs.configs) }}
-      max-parallel: 1
-      fail-fast: false
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -127,14 +84,13 @@ jobs:
     - name: Download build artifacts
       uses: actions/download-artifact@v4
       with:
-        name: build-artifacts-${{ matrix.config }}
+        name: build-artifacts
         path: artifacts
 
     - name: Prepare release assets
       id: prepare
       run: |
         mkdir -p release-assets
-        config_name="${{ matrix.config }}"
 
         # 根文件系统镜像
         find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
@@ -173,10 +129,8 @@ jobs:
     - name: Create release tag
       id: tag
       run: |
-        config_name="${{ matrix.config }}"
         timestamp=$(date +%Y%m%d-%H%M%S)
-        echo "tag=${config_name}-${timestamp}" >> $GITHUB_OUTPUT
-        echo "config_name=${config_name}" >> $GITHUB_OUTPUT
+        echo "tag=tinyai-${timestamp}" >> $GITHUB_OUTPUT
 
     - name: Create Git tag
       run: |
@@ -189,7 +143,7 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.tag.outputs.tag }}
-        name: Release ${{ steps.tag.outputs.config_name }} - ${{ steps.tag.outputs.tag }}
+        name: Release TinyAI - ${{ steps.tag.outputs.tag }}
         generate_release_notes: true
         fail_on_unmatched_files: false
         files: release-assets/*
