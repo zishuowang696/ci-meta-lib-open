@@ -61,8 +61,9 @@ jobs:
 
     - name: Build base system (kernel + minimal rootfs)
       run: |
-        sed 's/  - tinyai-core-image-base/  - core-image-minimal/' raspi-3b64-tinyai.yaml > /tmp/tinyai-base.yaml
-        kas build /tmp/tinyai-base.yaml
+        sed 's/  - tinyai-core-image-base/  - core-image-minimal/' raspi-3b64-tinyai.yaml > tinyai-base-temp.yaml
+        kas build tinyai-base-temp.yaml
+        rm tinyai-base-temp.yaml
 
     - name: Build full image
       run: kas build raspi-3b64-tinyai.yaml
