@@ -7,6 +7,7 @@ on:
     paths:
       - 'configs/base.yaml'
       - 'raspi-3b64-tinyai.yaml'
+      - 'raspi-3b64-tinyai-kernel.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
@@ -21,7 +22,7 @@ on:
           - 'no'
 
 jobs:
-  build:
+  kernel:
     runs-on: ubuntu-latest
     timeout-minutes: 480
     steps:
@@ -39,13 +40,11 @@ jobs:
         path: build/downloads
         key: yocto-downloads-v1-${{ runner.os }}
 
-    - name: Cache Yocto sstate
+    - name: Cache Yocto sstate (kernel)
       uses: actions/cache@v4
       with:
         path: build/sstate-cache
-        key: yocto-sstate-v1-${{ runner.os }}-tinyai
-        restore-keys: |
-          yocto-sstate-v1-${{ runner.os }}-
+        key: yocto-sstate-tinyai-v1-${{ runner.os }}-kernel
 
     - name: Enable user namespaces
       run: |
@@ -57,7 +56,47 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
-    - name: Build TinyAI image
+    - name: Build kernel
+      run: kas build raspi-3b64-tinyai-kernel.yaml
+
+  image:
+    needs: kernel
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Free disk space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        android: true
+
+    - name: Cache Yocto downloads
+      uses: actions/cache@v4
+      with:
+        path: build/downloads
+        key: yocto-downloads-v1-${{ runner.os }}
+
+    - name: Cache Yocto sstate (image, fallback to kernel)
+      uses: actions/cache@v4
+      with:
+        path: build/sstate-cache
+        key: yocto-sstate-tinyai-v1-${{ runner.os }}-image
+        restore-keys: |
+          yocto-sstate-tinyai-v1-${{ runner.os }}-kernel
+
+    - name: Enable user namespaces
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/99-userns.conf
+
+    - name: Install kas and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y kas chrpath diffstat python3-websockets
+
+    - name: Build full image
       run: kas build raspi-3b64-tinyai.yaml
 
     - name: Upload build artifacts
@@ -68,7 +107,7 @@ jobs:
         retention-days: 7
 
   release:
-    needs: build
+    needs: image
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
