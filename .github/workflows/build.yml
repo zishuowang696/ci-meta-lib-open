@@ -7,7 +7,6 @@ on:
     paths:
       - 'configs/base.yaml'
       - 'raspi-3b64-tinyai.yaml'
-      - 'raspi-3b64-tinyai-kernel.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
@@ -22,7 +21,7 @@ on:
           - 'no'
 
 jobs:
-  kernel:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 480
     steps:
@@ -34,17 +33,17 @@ jobs:
       with:
         android: true
 
-    - name: Cache Yocto downloads
-      uses: actions/cache@v4
+    - name: Restore Yocto downloads
+      uses: actions/cache/restore@v4
       with:
         path: build/downloads
         key: yocto-downloads-v1-${{ runner.os }}
 
-    - name: Restore Yocto sstate (kernel)
+    - name: Restore Yocto sstate
       uses: actions/cache/restore@v4
       with:
         path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}-kernel
+        key: yocto-sstate-tinyai-v1-${{ runner.os }}
 
     - name: Enable user namespaces
       run: |
@@ -56,64 +55,23 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y kas chrpath diffstat python3-websockets
 
-    - name: Build kernel
-      timeout-minutes: 330
-      run: kas build raspi-3b64-tinyai-kernel.yaml
-
-    - name: Save Yocto sstate (kernel)
-      if: always()
-      uses: actions/cache/save@v4
-      with:
-        path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}-kernel
-
-  image:
-    needs: kernel
-    runs-on: ubuntu-latest
-    timeout-minutes: 480
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Free disk space
-      uses: jlumbroso/free-disk-space@main
-      with:
-        android: true
-
-    - name: Cache Yocto downloads
-      uses: actions/cache@v4
-      with:
-        path: build/downloads
-        key: yocto-downloads-v1-${{ runner.os }}
-
-    - name: Restore Yocto sstate (image, fallback to kernel)
-      uses: actions/cache/restore@v4
-      with:
-        path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}-image
-        restore-keys: |
-          yocto-sstate-tinyai-v1-${{ runner.os }}-kernel
-
-    - name: Enable user namespaces
-      run: |
-        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-        echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/99-userns.conf
-
-    - name: Install kas and dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y kas chrpath diffstat python3-websockets
-
-    - name: Build full image
+    - name: Build TinyAI image
       timeout-minutes: 330
       run: kas build raspi-3b64-tinyai.yaml
 
-    - name: Save Yocto sstate (image)
+    - name: Save Yocto downloads
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: build/downloads
+        key: yocto-downloads-v1-${{ runner.os }}
+
+    - name: Save Yocto sstate
       if: always()
       uses: actions/cache/save@v4
       with:
         path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}-image
+        key: yocto-sstate-tinyai-v1-${{ runner.os }}
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -123,7 +81,7 @@ jobs:
         retention-days: 7
 
   release:
-    needs: image
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     permissions:
