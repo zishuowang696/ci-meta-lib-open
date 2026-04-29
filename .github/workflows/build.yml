@@ -63,6 +63,12 @@ jobs:
     - name: Build kernel (heaviest component — reused by full image via sstate)
       run: kas build raspi-3b64-tinyai-kernel.yaml
 
+    - name: Free disk — remove kernel build temp (keep sstate-cache and downloads)
+      run: |
+        rm -rf build/tmp
+        echo "--- disk after cleanup ---"
+        df -h /
+
     - name: Build full image
       run: kas build raspi-3b64-tinyai.yaml
 
