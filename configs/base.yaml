@@ -60,10 +60,6 @@ local_conf_header:
   verbose-output: |
     BB_VERBOSE_LOGS = "1"
 
-  # 磁盘空间优化
-  reduce-diskspace: |
-    INHERIT += "rm_work_and_downloads"
-
   # 基础配置
   standard: |
     CONF_VERSION = "2"
