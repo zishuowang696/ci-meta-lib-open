@@ -59,6 +59,10 @@ jobs:
       timeout-minutes: 330
       run: kas build raspi-3b64-tinyai.yaml
 
+    - name: Ensure cache directories exist
+      if: always()
+      run: mkdir -p build/downloads build/sstate-cache
+
     - name: Save Yocto downloads
       if: always()
       uses: actions/cache/save@v4
