@@ -60,6 +60,10 @@ jobs:
         sudo apt-get install -y chrpath diffstat python3-websockets
         pip install kas==4.7
 
+    - name: Dump bitbake environment
+      timeout-minutes: 10
+      run: kas shell raspi-3b64-tinyai.yaml -c "bitbake -e tinyai-core-image-base"
+
     - name: Build TinyAI image
       timeout-minutes: 330
       run: kas build raspi-3b64-tinyai.yaml
