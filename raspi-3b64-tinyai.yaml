@@ -18,10 +18,6 @@ local_conf_header:
     IMAGE_INSTALL:append:pn-tinyai-core-image-base = " linux-firmware-bcm43430 wpa-supplicant"
     LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
 
-  # OpenRC init 系统
-  openrc-init: |
-    INIT_MANAGER = "openrc"
-
   # initramfs 配置
   initramfs-config: |
     INITRAMFS_IMAGE = "core-image-minimal-initramfs"
