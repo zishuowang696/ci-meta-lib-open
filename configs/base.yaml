@@ -42,6 +42,14 @@ repos:
     layers:
       meta-oe:
 
+  # OpenRC init 系统层
+  meta-openrc:
+    url: https://github.com/jsbronder/meta-openrc.git
+    path: layers/meta-openrc
+    refspec: walnascar
+    layers:
+      openrc-layer:
+
   # TinyAi 自定义层
   meta-TinyAi:
     url: https://github.com/zishuowang696/meta-TinyAi.git
