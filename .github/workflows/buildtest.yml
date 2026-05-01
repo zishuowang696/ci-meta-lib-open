@@ -1,0 +1,76 @@
+name: Build Test (busybox)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/buildtest.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Free disk space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        android: true
+
+    - name: Restore Yocto downloads
+      uses: actions/cache/restore@v4
+      with:
+        path: build/downloads
+        key: yocto-downloads-v2-${{ runner.os }}
+        restore-keys: |
+          yocto-downloads-v2-${{ runner.os }}-
+          yocto-downloads-v1-${{ runner.os }}-
+
+    - name: Restore Yocto sstate
+      uses: actions/cache/restore@v4
+      with:
+        path: build/sstate-cache
+        key: yocto-sstate-tinyai-v2-${{ runner.os }}
+        restore-keys: |
+          yocto-sstate-tinyai-v2-${{ runner.os }}-
+          yocto-sstate-tinyai-v1-${{ runner.os }}-
+
+    - name: Ensure build directory exists
+      run: mkdir -p build/downloads build/sstate-cache
+
+    - name: Enable user namespaces
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        echo "kernel.apparmor_restrict_unprivileged_userns=0" | sudo tee /etc/sysctl.d/99-userns.conf
+
+    - name: Install kas and dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y chrpath diffstat python3-websockets
+        pip install kas==4.7
+
+    - name: Build busybox
+      timeout-minutes: 15
+      run: kas shell raspi-3b64-tinyai.yaml -c "bitbake busybox"
+
+    - name: Save Yocto downloads
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: build/downloads
+        key: yocto-downloads-v2-${{ runner.os }}-${{ github.sha }}
+
+    - name: Save Yocto sstate
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: build/sstate-cache
+        key: yocto-sstate-tinyai-v2-${{ runner.os }}-${{ github.sha }}

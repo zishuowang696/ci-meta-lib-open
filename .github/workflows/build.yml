@@ -41,13 +41,22 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: build/downloads
-        key: yocto-downloads-v1-${{ runner.os }}
+        key: yocto-downloads-v2-${{ runner.os }}
+        restore-keys: |
+          yocto-downloads-v2-${{ runner.os }}-
+          yocto-downloads-v1-${{ runner.os }}-
 
     - name: Restore Yocto sstate
       uses: actions/cache/restore@v4
       with:
         path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}
+        key: yocto-sstate-tinyai-v2-${{ runner.os }}
+        restore-keys: |
+          yocto-sstate-tinyai-v2-${{ runner.os }}-
+          yocto-sstate-tinyai-v1-${{ runner.os }}-
+
+    - name: Ensure build directory exists
+      run: mkdir -p build/downloads build/sstate-cache
 
     - name: Enable user namespaces
       run: |
@@ -62,7 +71,11 @@ jobs:
 
     - name: Dump bitbake environment
       timeout-minutes: 10
-      run: kas shell raspi-3b64-tinyai.yaml -c "bitbake -e tinyai-core-image-base"
+      run: |
+        kas shell raspi-3b64-tinyai.yaml -c "bitbake -e tinyai-core-image-base" | grep -E '^(DL_DIR|SSTATE_DIR|TOPDIR|TMPDIR)=' || true
+        echo "---"
+        ls -la build/ 2>/dev/null || echo "build/ does not exist yet"
+        ls -la build/downloads/ 2>/dev/null || echo "build/downloads/ does not exist yet"
 
     - name: Build TinyAI image
       timeout-minutes: 330
@@ -73,14 +86,14 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: build/downloads
-        key: yocto-downloads-v1-${{ runner.os }}
+        key: yocto-downloads-v2-${{ runner.os }}-${{ github.sha }}
 
     - name: Save Yocto sstate
       if: always()
       uses: actions/cache/save@v4
       with:
         path: build/sstate-cache
-        key: yocto-sstate-tinyai-v1-${{ runner.os }}
+        key: yocto-sstate-tinyai-v2-${{ runner.os }}-${{ github.sha }}
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
