@@ -1,11 +1,6 @@
 name: Build Test (busybox)
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '.github/workflows/buildtest.yml'
   workflow_dispatch:
 
 concurrency:
