@@ -47,8 +47,6 @@ repos:
     url: https://github.com/jsbronder/meta-openrc.git
     path: layers/meta-openrc
     refspec: walnascar
-    layers:
-      openrc-layer: .
 
   # TinyAi 自定义层
   meta-TinyAi:
