@@ -48,7 +48,7 @@ repos:
     path: layers/meta-openrc
     refspec: walnascar
     layers:
-      openrc-layer:
+      openrc-layer: .
 
   # TinyAi 自定义层
   meta-TinyAi:
