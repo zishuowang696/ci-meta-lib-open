@@ -67,7 +67,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y chrpath diffstat python3-websockets
-        pip install kas==4.7
+        pip install kas==5.2
 
     - name: Build TinyAI image
       timeout-minutes: 330
