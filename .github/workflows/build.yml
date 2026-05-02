@@ -73,16 +73,6 @@ jobs:
       timeout-minutes: 330
       run: kas build raspi-3b64-tinyai.yaml
 
-    - name: Dump full bitbake environment
-      if: always()
-      timeout-minutes: 10
-      run: |
-        deploy_dir="build/tmp/deploy/images"
-        mkdir -p "$deploy_dir"
-        kas shell raspi-3b64-tinyai.yaml -c "bitbake -e tinyai-core-image-base" > "$deploy_dir/bitbake_env.txt"
-        # 关键变量快速查看
-        grep -E '^(DL_DIR|SSTATE_DIR|TOPDIR|TMPDIR|MACHINE|DISTRO|IMAGE_INSTALL|DISTRO_FEATURES|KERNEL_IMAGETYPE)=' "$deploy_dir/bitbake_env.txt" || true
-
     - name: Save Yocto downloads
       if: always()
       uses: actions/cache/save@v4
