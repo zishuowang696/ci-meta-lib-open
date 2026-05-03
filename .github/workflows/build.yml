@@ -94,6 +94,13 @@ jobs:
         path: build/tmp/deploy/images/
         retention-days: 7
 
+    - name: Upload ipk repo (for gh-pages opkg feed)
+      uses: actions/upload-artifact@v4
+      with:
+        name: ipk-repo
+        path: build/tmp/deploy/ipk/
+        retention-days: 1
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -174,3 +181,54 @@ jobs:
         files: release-assets/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-ipk-repo:
+    needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download ipk artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: ipk-repo
+        path: /tmp/ipk-repo
+
+    - name: Deploy ipk repo to gh-pages branch
+      run: |
+        set -e
+
+        # Try to fetch existing gh-pages branch
+        git fetch origin gh-pages 2>/dev/null || true
+
+        if git rev-parse --verify origin/gh-pages > /dev/null 2>&1; then
+          git checkout gh-pages
+        else
+          # Orphan branch for first deployment
+          git checkout --orphan gh-pages
+          rm -rf .github .gitignore .gitattributes * 2>/dev/null || true
+        fi
+
+        # Replace ipk directory with current build output
+        rm -rf ipk
+        mv /tmp/ipk-repo ipk
+
+        # Configure git
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+
+        # Commit and push
+        git add -A
+        if git diff --cached --quiet; then
+          echo "No changes to ipk repo — skipping commit"
+        else
+          git commit -m "Update ipk repo from build ${{ github.sha }}"
+          git push origin gh-pages
+          echo "Deployed ipk repo to gh-pages branch"
+        fi
