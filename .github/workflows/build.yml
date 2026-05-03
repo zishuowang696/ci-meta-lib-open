@@ -215,7 +215,7 @@ jobs:
           rm -rf .github .gitignore .gitattributes * 2>/dev/null || true
         fi
 
-        # Filter: only custom TinyAi packages (system deps already in rootfs)
+        # Filter: only runtime model ipk (no -dbg/-dev/-src, no llama-cpp, no tinyai-demo)
         rm -rf ipk
         mkdir -p ipk
         for arch_dir in /tmp/ipk-repo/*/; do
@@ -223,11 +223,10 @@ jobs:
           [ "$arch" = "*" ] && continue
           mkdir -p "ipk/$arch"
 
-          # Copy only custom TinyAi packages per architecture
-          find "$arch_dir" -maxdepth 1 -type f \( \
-            -name "tinyai-*.ipk" -o \
-            -name "llama-cpp*.ipk" \
-          \) -exec cp {} "ipk/$arch/" \; 2>/dev/null || true
+          # Copy only tinyai-model-qwen runtime ipk (no -dbg, -dev, -src variants)
+          find "$arch_dir" -maxdepth 1 -type f -name "tinyai-model-qwen_*.ipk" \
+            ! -name "*-dbg_*" ! -name "*-dev_*" ! -name "*-src_*" \
+            -exec cp {} "ipk/$arch/" \; 2>/dev/null || true
 
           # Regenerate Packages.gz from filtered ipk files
           cd "ipk/$arch"
@@ -246,6 +245,7 @@ jobs:
         # Configure git
         git config user.name "github-actions"
         git config user.email "github-actions@github.com"
+        git config http.postBuffer 524288000
 
         # Commit and push
         git add -A
