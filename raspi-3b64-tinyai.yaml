@@ -7,6 +7,7 @@ machine: raspberrypi3-64
 distro: tinyai
 target:
   - tinyai-core-image-base
+  - tinyai-model-qwen
 
 local_conf_header:
   # 一键 demo 脚本
