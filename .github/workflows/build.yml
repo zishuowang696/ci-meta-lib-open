@@ -215,9 +215,33 @@ jobs:
           rm -rf .github .gitignore .gitattributes * 2>/dev/null || true
         fi
 
-        # Replace ipk directory with current build output
+        # Filter: only custom TinyAi packages (system deps already in rootfs)
         rm -rf ipk
-        mv /tmp/ipk-repo ipk
+        mkdir -p ipk
+        for arch_dir in /tmp/ipk-repo/*/; do
+          arch=$(basename "$arch_dir")
+          [ "$arch" = "*" ] && continue
+          mkdir -p "ipk/$arch"
+
+          # Copy only custom TinyAi packages per architecture
+          find "$arch_dir" -maxdepth 1 -type f \( \
+            -name "tinyai-*.ipk" -o \
+            -name "llama-cpp*.ipk" \
+          \) -exec cp {} "ipk/$arch/" \; 2>/dev/null || true
+
+          # Regenerate Packages.gz from filtered ipk files
+          cd "ipk/$arch"
+          if ls *.ipk 2>/dev/null; then
+            (
+              for ipk_file in *.ipk; do
+                ar p "$ipk_file" control.tar.gz | tar -xzO ./control
+                echo "Filename: $ipk_file"
+                echo ""
+              done
+            ) | gzip > Packages.gz
+          fi
+          cd "$OLDPWD"
+        done
 
         # Configure git
         git config user.name "github-actions"
