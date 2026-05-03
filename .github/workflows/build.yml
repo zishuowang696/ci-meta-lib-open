@@ -117,8 +117,8 @@ jobs:
       run: |
         mkdir -p release-assets
 
-        # 根文件系统镜像
-        find artifacts -type f \( -name "*.rpi-sdimg" -o -name "core-image-*.ext4" -o -name "core-image-*.tar.gz" \) \
+        # 根文件系统镜像（匹配所有 rpi-sdimg、ext4、tar.gz）
+        find artifacts -type f \( -name "*.rpi-sdimg" -o -name "*.ext4" -o -name "*.tar.gz" \) \
           | grep -v '\-[0-9]\{8\}' \
           | while read f; do cp "$f" release-assets/$(basename "$f"); done
 
