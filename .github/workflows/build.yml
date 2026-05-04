@@ -187,49 +187,36 @@ jobs:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'yes')
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-
     - name: Download ipk artifacts
       uses: actions/download-artifact@v4
       with:
         name: ipk-repo
         path: /tmp/ipk-repo
 
-    - name: Deploy ipk repo to gh-pages branch
+    - name: Prepare Pages content
       run: |
         set -e
+        mkdir -p /tmp/gh-pages-content/ipk
 
-        # Try to fetch existing gh-pages branch
-        git fetch origin gh-pages 2>/dev/null || true
-
-        if git rev-parse --verify origin/gh-pages > /dev/null 2>&1; then
-          git checkout gh-pages
-        else
-          # Orphan branch for first deployment
-          git checkout --orphan gh-pages
-          rm -rf .github .gitignore .gitattributes * 2>/dev/null || true
-        fi
-
-        # Filter: only runtime model ipk (no -dbg/-dev/-src, no llama-cpp, no tinyai-demo)
-        rm -rf ipk
-        mkdir -p ipk
+        # Filter: only runtime model ipk (no -dbg/-dev/-src variants)
         for arch_dir in /tmp/ipk-repo/*/; do
           arch=$(basename "$arch_dir")
           [ "$arch" = "*" ] && continue
-          mkdir -p "ipk/$arch"
+          mkdir -p "/tmp/gh-pages-content/ipk/$arch"
 
-          # Copy only tinyai-model-qwen runtime ipk (no -dbg, -dev, -src variants)
+          # Copy only tinyai-model-qwen runtime ipk
           find "$arch_dir" -maxdepth 1 -type f -name "tinyai-model-qwen_*.ipk" \
             ! -name "*-dbg_*" ! -name "*-dev_*" ! -name "*-src_*" \
-            -exec cp {} "ipk/$arch/" \; 2>/dev/null || true
+            -exec cp {} "/tmp/gh-pages-content/ipk/$arch/" \; 2>/dev/null || true
 
           # Regenerate Packages.gz from filtered ipk files
-          cd "ipk/$arch"
+          cd "/tmp/gh-pages-content/ipk/$arch"
           if ls *.ipk 2>/dev/null; then
             (
               for ipk_file in *.ipk; do
@@ -239,20 +226,14 @@ jobs:
               done
             ) | gzip > Packages.gz
           fi
-          cd "$OLDPWD"
+          cd /tmp
         done
 
-        # Configure git
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git config http.postBuffer 524288000
+    - name: Upload Pages artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: /tmp/gh-pages-content
 
-        # Commit and push
-        git add -A
-        if git diff --cached --quiet; then
-          echo "No changes to ipk repo — skipping commit"
-        else
-          git commit -m "Update ipk repo from build ${{ github.sha }}"
-          git push origin gh-pages
-          echo "Deployed ipk repo to gh-pages branch"
-        fi
+    - name: Deploy to GitHub Pages
+      id: deployment
+      uses: actions/deploy-pages@v4
