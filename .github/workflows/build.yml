@@ -229,6 +229,32 @@ jobs:
           cd /tmp
         done
 
+        # Generate browsable index
+        cd /tmp/gh-pages-content
+        {
+          echo '<!DOCTYPE html><html><head><meta charset="utf-8">'
+          echo '<title>TinyAi opkg feed</title>'
+          echo '<style>body{font-family:sans-serif;max-width:800px;margin:40px auto;padding:0 20px}'
+          echo 'h1{color:#333}a{color:#0366d6;text-decoration:none}a:hover{text-decoration:underline}'
+          echo 'li{margin:8px 0}pre{background:#f6f8fa;padding:12px;border-radius:6px}</style></head><body>'
+          echo '<h1>TinyAi opkg feed</h1>'
+          echo '<p>Configure on device:</p>'
+          echo '<pre>src/gz tinyai https://zishuowang696.github.io/ci-meta-lib-open/ipk/cortexa53-nocrypto</pre>'
+          echo '<h2>Architectures</h2><ul>'
+          for arch_dir in ipk/*/; do
+            arch=$(basename "$arch_dir")
+            size=$(du -sh "$arch_dir" 2>/dev/null | cut -f1)
+            echo "<li><a href=\"$arch_dir\"><strong>$arch</strong></a> ($size)</li>"
+          done
+          echo '</ul><h2>opkg usage</h2>'
+          echo '<pre>opkg update'
+          echo 'opkg list | grep tinyai'
+          echo 'opkg install tinyai-model-qwen</pre>'
+          echo '<hr><p><small>Updated from build <a href="https://github.com/zishuowang696/ci-meta-lib-open/actions/runs/${{ github.run_id }}">${{ github.sha }}</a></small></p>'
+          echo '</body></html>'
+        } > index.html
+        cd /tmp
+
     - name: Upload Pages artifact
       uses: actions/upload-pages-artifact@v3
       with:
