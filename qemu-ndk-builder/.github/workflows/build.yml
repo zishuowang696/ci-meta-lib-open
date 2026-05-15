@@ -1,0 +1,83 @@
+name: Build QEMU for Android aarch64
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            wget unzip make python3 python3-pip ninja-build \
+            pkg-config gettext bzip2 xz-utils
+
+      - name: Run build script
+        env:
+          # Override GLib tarball source if glib-ndk-builder Pages not available
+          # Option A: full URL (highest priority)
+          GLIB_TARBALL_URL: ${{ secrets.GLIB_TARBALL_URL }}
+          # Option B: GitHub "owner/repo" (auto-constructs Pages URL)
+          GLIB_PAGES_REPO: ${{ secrets.GLIB_PAGES_REPO }}
+        run: |
+          bash build-qemu.sh
+
+      - name: Upload tarball artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-android-aarch64
+          path: output/qemu-*.tar.gz
+          retention-days: 30
+
+  deploy-pages:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-android-aarch64
+          path: output
+
+      - name: Ensure GitHub Pages is enabled
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "==> Checking Pages status..."
+          if gh api repos/${{ github.repository }}/pages --silent 2>/dev/null; then
+            echo "Pages already enabled."
+          else
+            echo "Enabling Pages (GitHub Actions source)..."
+            gh api repos/${{ github.repository }}/pages \
+              --method POST \
+              --field build_type=workflow \
+              --silent
+            echo "Pages enabled. Waiting 10s for propagation..."
+            sleep 10
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
