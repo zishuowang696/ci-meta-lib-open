@@ -2,6 +2,18 @@ name: Build Test (busybox)
 
 on:
   workflow_dispatch:
+    inputs:
+      yaml_config:
+        description: '选择 YAML 配置文件'
+        required: true
+        type: choice
+        default: 'raspi-3b64-tinyai.yaml'
+        options:
+          - 'raspi-3b64-tinyai.yaml'
+          - 'qemuarm64-tinyai.yaml'
+          - 'raspi-3b64-tinyai-kernel.yaml'
+          - 'raspi-3b64-poky.yaml'
+          - 'raspi-3b64-poky-tiny.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -54,7 +66,7 @@ jobs:
 
     - name: Build busybox
       timeout-minutes: 15
-      run: kas shell raspi-3b64-tinyai.yaml -c "bitbake busybox"
+      run: kas shell ${{ github.event.inputs.yaml_config }} -c "bitbake busybox"
 
     - name: Save Yocto downloads
       if: always()

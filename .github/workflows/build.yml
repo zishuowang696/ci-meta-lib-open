@@ -11,6 +11,17 @@ on:
 
   workflow_dispatch:
     inputs:
+      yaml_config:
+        description: '选择 YAML 配置文件'
+        required: true
+        type: choice
+        default: 'raspi-3b64-tinyai.yaml'
+        options:
+          - 'raspi-3b64-tinyai.yaml'
+          - 'qemuarm64-tinyai.yaml'
+          - 'raspi-3b64-tinyai-kernel.yaml'
+          - 'raspi-3b64-poky.yaml'
+          - 'raspi-3b64-poky-tiny.yaml'
       create_release:
         description: '是否创建Release'
         required: true
@@ -69,9 +80,18 @@ jobs:
         sudo apt-get install -y chrpath diffstat python3-websockets
         pip install kas==5.2
 
-    - name: Build TinyAI image
+    - name: Determine YAML config
+      id: config
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "yaml=${{ github.event.inputs.yaml_config }}" >> $GITHUB_OUTPUT
+        else
+          echo "yaml=raspi-3b64-tinyai.yaml" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Build image
       timeout-minutes: 330
-      run: kas build raspi-3b64-tinyai.yaml
+      run: kas build ${{ steps.config.outputs.yaml }}
 
     - name: Save Yocto downloads
       if: always()
