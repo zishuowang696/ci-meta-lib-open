@@ -14,10 +14,9 @@ local_conf_header:
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"
 
-  # RPi 3B WiFi 支持
-  wifi-support: |
-    IMAGE_INSTALL:append:pn-tinyai-core-image-base = " linux-firmware-bcm43430 wpa-supplicant"
-    LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
+  # QEMU 镜像格式（移除 base.yaml 中继承的 rpi-sdimg）
+  qemu-fstypes: |
+    IMAGE_FSTYPES:remove = "rpi-sdimg"
 
   # initramfs 配置
   initramfs-config: |
