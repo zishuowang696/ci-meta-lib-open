@@ -42,13 +42,13 @@ repos:
     layers:
       meta-oe:
 
-  # OpenRC 初始化系统支持层
+  # OpenRC 初始化系统支持层（层在 repo 根目录，用 . 表示）
   meta-openrc:
     url: https://github.com/jsbronder/meta-openrc.git
     path: layers/meta-openrc
     refspec: whinlatter
     layers:
-      openrc-layer:
+      .:
 
   # TinyAi 自定义层
   meta-TinyAi:
