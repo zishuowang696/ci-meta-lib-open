@@ -46,7 +46,7 @@ repos:
   meta-openrc:
     url: https://github.com/jsbronder/meta-openrc.git
     path: layers/meta-openrc
-    refspec: whinlatter
+    refspec: master
     layers:
       .:
 
