@@ -10,6 +10,10 @@ target:
   - tinyai-model-qwen
 
 local_conf_header:
+  # OpenRC 初始化系统（覆盖 distro 的 sysvinit）
+  init-system: |
+    INIT_MANAGER = "openrc"
+
   # 一键 demo 脚本
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"
