@@ -10,6 +10,10 @@ target:
   - tinyai-model-qwen
 
 local_conf_header:
+  # 使用 sysvinit（tinyai.conf 默认已切换为 openrc，RPi 保持 sysvinit）
+  init-system: |
+    INIT_MANAGER = "sysvinit"
+
   # 一键 demo 脚本
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"

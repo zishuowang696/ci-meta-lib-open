@@ -10,17 +10,14 @@ target:
   - tinyai-model-qwen
 
 local_conf_header:
-  # OpenRC 初始化系统（覆盖 distro 的 sysvinit）
-  init-system: |
-    INIT_MANAGER = "openrc"
-
   # 一键 demo 脚本
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"
 
-  # QEMU 镜像格式（移除 base.yaml 中继承的 rpi-sdimg）
+  # QEMU 镜像格式（移除 base.yaml 中继承的 rpi-sdimg，主镜像同时输出 cpio.gz）
   qemu-fstypes: |
     IMAGE_FSTYPES:remove = "rpi-sdimg"
+    IMAGE_FSTYPES:append = " cpio.gz"
 
   # initramfs 配置
   initramfs-config: |
