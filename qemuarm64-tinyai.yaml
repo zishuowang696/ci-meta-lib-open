@@ -7,12 +7,15 @@ machine: qemuarm64
 distro: tinyai
 target:
   - tinyai-core-image-base
-  - tinyai-model-qwen
 
 local_conf_header:
   # 一键 demo 脚本
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"
+
+  # 模型直接装到根文件系统（不用 opkg 单独安装）
+  model-in-rootfs: |
+    IMAGE_INSTALL:append = " tinyai-model-qwen"
 
   # QEMU 镜像格式（移除 base.yaml 中继承的 rpi-sdimg，主镜像同时输出 cpio.gz）
   qemu-fstypes: |
