@@ -31,6 +31,10 @@ jobs:
       uses: jlumbroso/free-disk-space@main
       with:
         android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        tool-cache: true
 
     - name: Restore Yocto downloads
       uses: actions/cache/restore@v4
