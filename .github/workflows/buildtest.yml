@@ -10,6 +10,8 @@ on:
         default: 'raspi-3b64-tinyai.yaml'
         options:
           - 'raspi-3b64-tinyai.yaml'
+          - 'raspi-4b64-tinyai.yaml'
+          - 'raspi-5-tinyai.yaml'
           - 'qemuarm64-tinyai.yaml'
           - 'raspi-3b64-tinyai-kernel.yaml'
           - 'raspi-3b64-poky.yaml'

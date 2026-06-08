@@ -7,6 +7,8 @@ on:
     paths:
       - 'configs/base.yaml'
       - 'raspi-3b64-tinyai.yaml'
+      - 'raspi-4b64-tinyai.yaml'
+      - 'raspi-5-tinyai.yaml'
       - '.github/workflows/build.yml'
 
   workflow_dispatch:
@@ -18,6 +20,8 @@ on:
         default: 'raspi-3b64-tinyai.yaml'
         options:
           - 'raspi-3b64-tinyai.yaml'
+          - 'raspi-4b64-tinyai.yaml'
+          - 'raspi-5-tinyai.yaml'
           - 'qemuarm64-tinyai.yaml'
           - 'raspi-3b64-tinyai-kernel.yaml'
           - 'raspi-3b64-poky.yaml'
@@ -90,7 +94,14 @@ jobs:
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "yaml=${{ github.event.inputs.yaml_config }}" >> $GITHUB_OUTPUT
         else
-          echo "yaml=raspi-3b64-tinyai.yaml" >> $GITHUB_OUTPUT
+          # 根据 push 修改的 raspi yaml 自动选择构建目标
+          CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
+            | grep -E 'raspi-(3b64|4b64|5)-tinyai\.yaml$' | head -1)
+          if [ -n "$CHANGED" ]; then
+            echo "yaml=$CHANGED" >> $GITHUB_OUTPUT
+          else
+            echo "yaml=raspi-3b64-tinyai.yaml" >> $GITHUB_OUTPUT
+          fi
         fi
 
     - name: Build image
