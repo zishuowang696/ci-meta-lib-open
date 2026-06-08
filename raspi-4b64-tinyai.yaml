@@ -18,7 +18,7 @@ local_conf_header:
   tinyai-demo: |
     IMAGE_INSTALL:append = " tinyai-demo"
 
-  # RPi 4 WiFi 支持（MACHINE_EXTRA_RRECOMMENDS 已包含 bcm43455/43456 固件）
+  # RPi 4B WiFi 支持（MACHINE_EXTRA_RRECOMMENDS 已包含 bcm43455/43456 固件）
   wifi-support: |
     IMAGE_INSTALL:append:pn-tinyai-core-image-base = " wpa-supplicant"
     LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
@@ -52,8 +52,7 @@ local_conf_header:
   sstate-dir: |
     SSTATE_DIR = "${TOPDIR}/../build/sstate-cache"
 
-  # RPi 4 内核配置（cortex-a72，armv8-a）
+  # RPi 4B 内核配置
   kernel-config: |
     PREFERRED_PROVIDER_virtual/kernel:raspberrypi4-64 = "linux-raspberrypi"
     PREFERRED_VERSION_linux-raspberrypi = "6.6%"
-
