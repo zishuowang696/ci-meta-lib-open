@@ -1,0 +1,58 @@
+header:
+  version: 8
+  includes:
+    - configs/base.yaml
+
+machine: raspberrypi5
+distro: tinyai
+target:
+  - tinyai-core-image-base
+  - tinyai-model-qwen
+
+local_conf_header:
+  # 使用 sysvinit（tinyai.conf 默认已切换为 openrc，RPi 保持 sysvinit）
+  init-system: |
+    INIT_MANAGER = "sysvinit"
+
+  # 一键 demo 脚本
+  tinyai-demo: |
+    IMAGE_INSTALL:append = " tinyai-demo"
+
+  # RPi 5 WiFi 支持（MACHINE_EXTRA_RRECOMMENDS 已包含 bcm43455/43456 固件）
+  wifi-support: |
+    IMAGE_INSTALL:append:pn-tinyai-core-image-base = " wpa-supplicant"
+    LICENSE_FLAGS_ACCEPTED += "synaptics-killswitch"
+
+  # initramfs 配置
+  initramfs-config: |
+    INITRAMFS_IMAGE = "core-image-minimal-initramfs"
+    INITRAMFS_IMAGE_BUNDLE = "0"
+    IMAGE_FSTYPES:pn-core-image-minimal-initramfs = "cpio.gz"
+
+  # sstate cache 镜像（官方源，RPi5 仅需 all + aarch64）
+  sstate-mirror: |
+    SSTATE_MIRRORS = "\
+        file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH \
+        file://.* http://sstate.yoctoproject.org/aarch64/PATH;downloadfilename=PATH \
+        "
+
+  # 源码预下载镜像
+  premirror: |
+    PREMIRRORS:append = "\
+        git://.*/.* http://downloads.yoctoproject.org/mirror/sources/ \n\
+        https?://.*/.* http://downloads.yoctoproject.org/mirror/sources/ \n\
+        ftp://.*/.* http://downloads.yoctoproject.org/mirror/sources/ \n\
+        "
+
+  # 禁用 hash equivalence（兼容官方 sstate mirror）
+  disable-hash-equiv: |
+    BB_SIGNATURE_HANDLER = "OEBasicHash"
+
+  # sstate 缓存目录（跨构建复用）
+  sstate-dir: |
+    SSTATE_DIR = "${TOPDIR}/../build/sstate-cache"
+
+  # RPi 5 内核配置（cortex-a76，armv8.2-a）
+  kernel-config: |
+    PREFERRED_PROVIDER_virtual/kernel:raspberrypi5 = "linux-raspberrypi"
+    PREFERRED_VERSION_linux-raspberrypi = "6.6%"
